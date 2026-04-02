@@ -111,6 +111,20 @@ def map_dict_to_jaspe_config(data: dict) -> JaspeConfig:
 
 
 def load_config(path: Path) -> JaspeConfig:
+    import sys
+    from rich.console import Console
+    from rich.panel import Panel
+    c = Console()
+    
+    if not path.is_file():
+        c.print("[red]Fichier jaspe.toml introuvable. Êtes-vous dans un projet Jaspe ?[/red]")
+        sys.exit(1)
+        
     raw = read_toml_file(path)
-    data = parse_toml_to_dict(raw)
+    try:
+        data = parse_toml_to_dict(raw)
+    except tomllib.TOMLDecodeError as e:
+        c.print(Panel(str(e), title="[bold red]Erreur de syntaxe dans jaspe.toml[/bold red]", border_style="red"))
+        sys.exit(1)
+        
     return map_dict_to_jaspe_config(data)

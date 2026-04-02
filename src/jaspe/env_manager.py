@@ -100,7 +100,13 @@ def read_env_toml(path: Path) -> dict:
     if not path.exists():
         return {}
     raw = path.read_text(encoding="utf-8")
-    return tomllib.loads(raw)
+    try:
+        return tomllib.loads(raw)
+    except tomllib.TOMLDecodeError as e:
+        from rich.panel import Panel
+        import sys
+        console.print(Panel(str(e), title="[bold red]Erreur de syntaxe dans .env.toml[/bold red]", border_style="red"))
+        sys.exit(1)
 
 
 def read_local_env_file(path: Path) -> dict:

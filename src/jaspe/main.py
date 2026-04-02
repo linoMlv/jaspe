@@ -58,6 +58,7 @@ def start(
         generate_systemd_service_string,
         run_npm_build,
         write_runner,
+        dry_run_asgi,
     )
 
     target = resolve_target_dir()
@@ -88,6 +89,7 @@ def start(
         if not skip_build:
             run_npm_build(target / cfg.config.frontend_folder, front_env)
         write_runner(target, cfg)
+        dry_run_asgi(target, cfg, back_env)
 
         user = getpass.getuser()
         service_content = generate_systemd_service_string(

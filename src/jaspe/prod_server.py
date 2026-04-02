@@ -2,26 +2,50 @@ import subprocess
 from pathlib import Path
 
 from rich.console import Console
-
-from rich.console import Console
 from jaspe.ui import run_with_spinner
 from jaspe.config import JaspeConfig
 
+console = Console()
+
 ASGI_WRAPPER_TEMPLATE = """\
 import sys
+import inspect
+import os
 sys.path.insert(0, "{backend_abs}")
 
 from {module} import {attr} as user_app
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
-user_app.mount("{assets_prefix}", StaticFiles(directory="{dist_abs}/assets"), name="assets")
+# Si l'utilisateur a passé une fonction (Factory Pattern) sans argument au lieu de l'instance
+if inspect.isfunction(user_app) and len(inspect.signature(user_app).parameters) == 0:
+    user_app = user_app()
 
-@user_app.exception_handler(404)
-async def custom_404_handler(request, exc):
-    if request.url.path.startswith("{api_prefix}"):
-        return JSONResponse({{"detail": "Not Found"}}, status_code=404)
-    return FileResponse("{dist_abs}/index.html")
+class SPAFallbackMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        if response.status_code == 404:
+            if request.url.path.startswith("{api_prefix}") or request.url.path.startswith("{assets_prefix}"):
+                return response
+            
+            # Vérifier si c'est un fichier à la racine de dist/ (ex: /favicon.ico)
+            file_path = os.path.join("{dist_abs}", request.url.path.lstrip("/"))
+            if os.path.isfile(file_path):
+                return FileResponse(file_path)
+                
+            # Si le lien semble être un fichier (a une extension) mais n'existe pas, on laisse le 404
+            if "." in request.url.path.split("/")[-1]:
+                return response
+
+            return FileResponse("{dist_abs}/index.html")
+        return response
+
+jaspe_app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+jaspe_app.add_middleware(SPAFallbackMiddleware)
+jaspe_app.mount("{assets_prefix}", StaticFiles(directory="{dist_abs}/assets"), name="assets")
+jaspe_app.mount("/", user_app)
 """
 
 SYSTEMD_TEMPLATE = """\
@@ -34,7 +58,7 @@ Type=simple
 WorkingDirectory={project_path}
 {env_lines}
 Environment=PYTHONPATH={jaspe_dir}
-ExecStart={venv_python} -m uvicorn runner:user_app --host {host} --port {port}
+ExecStart={venv_python} -m uvicorn runner:jaspe_app --host {host} --port {port}
 Restart={restart}
 
 [Install]
@@ -128,6 +152,17 @@ def generate_systemd_service_string(
         host=config.config.host,
         port=config.config.app_port,
         restart=restart,
+    )
+
+
+def dry_run_asgi(project_path: Path, config: JaspeConfig, env: dict) -> None:
+    jaspe_dir = str(project_path / ".jaspe")
+    venv_python = str(project_path / config.config.backend_folder / ".venv" / "bin" / "python")
+    run_with_spinner(
+        [venv_python, "-c", "import runner"],
+        "Audit de santé de l'application (Dry-Run)",
+        cwd=jaspe_dir,
+        env=env,
     )
 
 
