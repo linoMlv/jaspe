@@ -89,7 +89,7 @@ Déployer une application fullstack **FastAPI + React** sur un serveur Linux ne 
 Le moyen le plus simple et recommandé d'installer Jaspe de façon globale sur n'importe quelle machine (Linux, WSL) est d'utiliser le script d'installation automatique : 
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/linomlv/jaspe/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/linoMlv/jaspe/refs/heads/master/install.sh | bash
 ```
 
 Si vous préférez procéder manuellement depuis les sources (pour le développement) :

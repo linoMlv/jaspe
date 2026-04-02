@@ -50,6 +50,7 @@ def run_deploy(cfg: JaspeConfig, target: Path):
         console.print("[red]❌ 'uv' n'est pas installé sur la machine distante.[/red]")
         if Confirm.ask("Voulez-vous l'installer automatiquement via curl ?"):
             run_ssh_with_spinner(host_target, "curl -LsSf https://astral.sh/uv/install.sh | sh", "Installation de uv (astral.sh)")
+            run_ssh_with_spinner(host_target, "source $HOME/.local/bin/env", "Activation de uv")
         else:
             raise typer.Exit(1)
     else:
@@ -59,7 +60,8 @@ def run_deploy(cfg: JaspeConfig, target: Path):
     if res_jaspe.returncode != 0:
         console.print("[red]❌ 'jaspe' n'est pas installé sur la machine distante.[/red]")
         if Confirm.ask("Voulez-vous installer jaspe automatiquement sur le serveur ?"):
-            run_ssh_with_spinner(host_target, "export PATH=$PATH:$HOME/.local/bin; uv tool install jaspe", "Installation de jaspe (uv tool install)")
+            run_ssh_with_spinner(host_target, "export PATH=$PATH:$HOME/.local/bin; curl -fsSL https://raw.githubusercontent.com/linoMlv/jaspe/refs/heads/master/install.sh | bash", "Installation de jaspe (install.sh)")
+            run_ssh_with_spinner(host_target, "source $HOME/.local/bin/env", "Activation de jaspe")
         else:
             raise typer.Exit(1)
     else:
