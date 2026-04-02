@@ -106,11 +106,18 @@ def run_deploy(cfg: JaspeConfig, target: Path):
                 front_path = target / cfg.config.frontend_folder
                 run_with_spinner(["npm", "run", "build"], "Build local du frontend React/Vite", cwd=str(front_path))
                 
-            cmd_rsync = [
-                "rsync", "-avz", "--filter=:- .gitignore", "--exclude", ".git", "--exclude", "node_modules", 
+            cmd_rsync = ["rsync", "-avz"]
+            
+            if cfg.deploy.build_locally:
+                # Inclure le dossier dist avant d'appliquer les filtres gitignore
+                dist_rel = f"{cfg.config.frontend_folder}/{cfg.frontend.dist_folder}"
+                cmd_rsync.extend(["--include", f"{dist_rel}/***", "--exclude", f"{cfg.config.frontend_folder}/*"])
+
+            cmd_rsync.extend([
+                "--filter=:- .gitignore", "--exclude", ".git", "--exclude", "node_modules", 
                 "--exclude", ".venv", "--exclude", "__pycache__", 
                 str(target) + "/", f"{host_target}:{remote_path}/"
-            ]
+            ])
             run_with_spinner(cmd_rsync, "Transfert Rsync (Initial) vers le serveur (Ignorant les fichiers lourds)")
             run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.backend_folder} && ( [ -d .venv ] || uv venv ) && uv pip install -r requirements.txt", "Installation distante des dépendances Python")
             if not cfg.deploy.build_locally:
@@ -124,11 +131,18 @@ def run_deploy(cfg: JaspeConfig, target: Path):
                 front_path = target / cfg.config.frontend_folder
                 run_with_spinner(["npm", "run", "build"], "Build local du frontend React/Vite", cwd=str(front_path))
                 
-            cmd_rsync = [
-                "rsync", "-avz", "--delete", "--filter=:- .gitignore", "--exclude", ".git", "--exclude", "node_modules", 
+            cmd_rsync = ["rsync", "-avz", "--delete"]
+            
+            if cfg.deploy.build_locally:
+                # Inclure le dossier dist avant d'appliquer les filtres gitignore
+                dist_rel = f"{cfg.config.frontend_folder}/{cfg.frontend.dist_folder}"
+                cmd_rsync.extend(["--include", f"{dist_rel}/***", "--exclude", f"{cfg.config.frontend_folder}/*"])
+
+            cmd_rsync.extend([
+                "--filter=:- .gitignore", "--exclude", ".git", "--exclude", "node_modules", 
                 "--exclude", ".venv", "--exclude", "__pycache__", 
                 str(target) + "/", f"{host_target}:{remote_path}/"
-            ]
+            ])
             run_with_spinner(cmd_rsync, "Envoi Rapide Rsync des modifs (Update local)")
             run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.backend_folder} && ( [ -d .venv ] || uv venv ) && uv pip install -r requirements.txt", "Mise à jour distante des dépendances Python")
             if not cfg.deploy.build_locally:

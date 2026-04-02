@@ -44,7 +44,12 @@ class SPAFallbackMiddleware(BaseHTTPMiddleware):
 
 jaspe_app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 jaspe_app.add_middleware(SPAFallbackMiddleware)
-jaspe_app.mount("{assets_prefix}", StaticFiles(directory="{dist_abs}/assets"), name="assets")
+
+# Monter /assets seulement si le dossier existe (Vite ne le crée pas si vide)
+assets_path = os.path.join("{dist_abs}", "assets")
+if os.path.isdir(assets_path):
+    jaspe_app.mount("{assets_prefix}", StaticFiles(directory=assets_path), name="assets")
+
 jaspe_app.mount("/", user_app)
 """
 
