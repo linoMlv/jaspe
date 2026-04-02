@@ -6,6 +6,10 @@
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge" alt="License">
 </p>
 
+<p align="center">
+  <img src="./jaspe-logo.png">
+</p>
+
 <h1 align="center">Jaspe</h1>
 
 <p align="center">
