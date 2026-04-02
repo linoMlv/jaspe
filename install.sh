@@ -50,7 +50,7 @@ REPO_URL="${JASPE_REPO_URL:-https://github.com/linomlv/jaspe.git}"
 if [ -d "$INSTALL_DIR" ]; then
     echo -e "${BLUE}Préparation de la mise à jour...${NC}"
     cd "$INSTALL_DIR"
-    git pull origin main --quiet
+    git pull origin master --quiet
 else
     echo -e "${BLUE}Clonage du dépôt Jaspe vers $INSTALL_DIR...${NC}"
     git clone "$REPO_URL" "$INSTALL_DIR" --quiet
