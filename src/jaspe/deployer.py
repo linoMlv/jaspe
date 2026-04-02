@@ -66,6 +66,20 @@ def run_deploy(cfg: JaspeConfig, target: Path):
             raise typer.Exit(1)
     else:
         console.print("[green]✔ 'jaspe' est installé.[/green]")
+        # Audit de mise à jour (Git)
+        check_git_cmd = (
+            "if [ -d $HOME/.jaspe-cli ]; then "
+            "cd $HOME/.jaspe-cli && git fetch --quiet && "
+            "LOCAL=$(git rev-parse HEAD) && REMOTE=$(git rev-parse @{u}) && "
+            "if [ \"$LOCAL\" != \"$REMOTE\" ]; then echo 'UPDATE_AVAILABLE'; fi; "
+            "fi"
+        )
+        res_git = run_ssh(host_target, check_git_cmd, check=False)
+        if "UPDATE_AVAILABLE" in res_git.stdout:
+            console.print("[yellow]⚠️ Une mise à jour de l'outil Jaspe est disponible sur le serveur.[/yellow]")
+            if Confirm.ask("Voulez-vous mettre à jour Jaspe sur le serveur maintenant ?"):
+                run_ssh_with_spinner(host_target, "export PATH=$PATH:$HOME/.local/bin; curl -fsSL https://raw.githubusercontent.com/linoMlv/jaspe/refs/heads/master/install.sh | bash", "Mise à jour de l'outil Jaspe (install.sh)")
+                run_ssh_with_spinner(host_target, "source $HOME/.local/bin/env", "Réactivation après mise à jour")
         
     if not cfg.deploy.build_locally:
         res_node = run_ssh(host_target, "command -v node", check=False)
@@ -98,7 +112,7 @@ def run_deploy(cfg: JaspeConfig, target: Path):
                 str(target) + "/", f"{host_target}:{remote_path}/"
             ]
             run_with_spinner(cmd_rsync, "Transfert Rsync (Initial) vers le serveur (Ignorant les fichiers lourds)")
-            run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.backend_folder} && uv venv && uv pip sync requirements.txt", "Installation distante des dépendances Python")
+            run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.backend_folder} && ( [ -d .venv ] || uv venv ) && uv pip sync requirements.txt", "Installation distante des dépendances Python")
             if not cfg.deploy.build_locally:
                 run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.frontend_folder} && npm install", "Installation distante des dépendances Node")
     else:
@@ -116,7 +130,7 @@ def run_deploy(cfg: JaspeConfig, target: Path):
                 str(target) + "/", f"{host_target}:{remote_path}/"
             ]
             run_with_spinner(cmd_rsync, "Envoi Rapide Rsync des modifs (Update local)")
-            run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.backend_folder} && uv venv && uv pip sync requirements.txt", "Mise à jour distante des dépendances Python")
+            run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.backend_folder} && ( [ -d .venv ] || uv venv ) && uv pip sync requirements.txt", "Mise à jour distante des dépendances Python")
             if not cfg.deploy.build_locally:
                 run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.frontend_folder} && npm install", "Mise à jour distante des dépendances Node")
 

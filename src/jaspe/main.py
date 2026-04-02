@@ -6,11 +6,32 @@ from rich.console import Console
 
 from rich.console import Console
 
-from jaspe import registry
+from jaspe import registry, __version__
 from jaspe.ui import run_with_spinner
 from jaspe.config import load_config
 
+
+def version_callback(value: bool):
+    if value:
+        print(f"{__version__}")
+        raise typer.Exit()
+
+
 app = typer.Typer(help="Jaspe — Déploiement zero-friction pour FastAPI + Vite/React/TS")
+
+
+@app.callback()
+def main(
+    version: bool = typer.Option(
+        None,
+        "--version",
+        "-v",
+        callback=version_callback,
+        is_eager=True,
+        help="Affiche la version de Jaspe",
+    ),
+):
+    pass
 db_app = typer.Typer(help="Commandes pour la base de données (Alembic)")
 app.add_typer(db_app, name="db")
 console = Console()

@@ -158,10 +158,12 @@ dist_folder = "dist"         # Sortie du build Vite
 assets_prefix = "/assets"    # Prefixe de montage des fichiers statiques
 
 [deploy]
-target = "user@192.168.0.1"  # Identifiant SSH de votre VPS cible
-path = "/var/www/mon_projet"    # Destination absolue du dossier distant
-sync_env = true                 # Autoriser la synchro interactive du .env.toml
-build_locally = false           # Si true, délègue uniquement l'artefact pré-compilé pour soulager le VPS
+# NOTE: Cette section contient des données sensibles. Il est RECOMMANDÉ 
+# de la placer dans le fichier .env.toml (qui est ignoré par Git).
+target = "user@192.168.0.1"
+path = "/var/www/mon_projet"
+sync_env = true
+build_locally = false
 
 [[cron]]
 name = "cleanup"                # Identifiant pour le log et le service
@@ -182,9 +184,15 @@ VITE_API_URL = "/api"
 [backend]
 DATABASE_URL = "postgresql://user:pass@localhost/db"
 SECRET_KEY = "super_secret"
+
+[deploy]
+# Vos accès SSH confidentiels sont à l'abri ici (hors du jaspe.toml commité)
+target = "user@vps.coodlab.fr"
+path = "/var/www/abacus"
 ```
 
 **Ordre de priorité :** Variables système (OS) > `.env.toml` > fichiers `.env` locaux.
+**Fusion Logique :** Jaspe fusionne la section `[deploy]` de `.env.toml` par-dessus celle de `jaspe.toml`.
 
 ### Référence des commandes
 

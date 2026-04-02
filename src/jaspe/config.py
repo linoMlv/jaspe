@@ -50,13 +50,6 @@ class FrontendSection:
 
 
 @dataclass
-class FrontendSection:
-    build_command: str = "npm run build"
-    dist_folder: str = "dist"
-    assets_prefix: str = "/assets"
-
-
-@dataclass
 class DeploySection:
     target: str = ""
     path: str = ""
@@ -126,5 +119,18 @@ def load_config(path: Path) -> JaspeConfig:
     except tomllib.TOMLDecodeError as e:
         c.print(Panel(str(e), title="[bold red]Erreur de syntaxe dans jaspe.toml[/bold red]", border_style="red"))
         sys.exit(1)
+    
+    # Fusionner la section [deploy] depuis .env.toml si présent (car sensible)
+    env_path = path.parent / ".env.toml"
+    if env_path.is_file():
+        try:
+            env_data = parse_toml_to_dict(env_path.read_text(encoding="utf-8"))
+            if "deploy" in env_data:
+                if "deploy" not in data:
+                    data["deploy"] = {}
+                data["deploy"].update(env_data["deploy"])
+        except Exception:
+            # On ignore les erreurs ici car .env.toml est géré séparément par env_manager
+            pass
         
     return map_dict_to_jaspe_config(data)

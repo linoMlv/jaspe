@@ -89,7 +89,7 @@ def ensure_python_venv(required_version: str, backend_path: Path) -> None:
         f"[blue]Création du venv avec Python {target_version} via uv...[/blue]"
     )
     subprocess.run(
-        ["uv", "venv", "--python", target_version],
+        ["uv", "venv", "--python", target_version, "--clear"],
         cwd=str(backend_path),
         check=True,
     )
