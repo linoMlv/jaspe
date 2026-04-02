@@ -158,7 +158,7 @@ dist_folder = "dist"         # Sortie du build Vite
 assets_prefix = "/assets"    # Prefixe de montage des fichiers statiques
 
 [deploy]
-target = "root@vps.coodlab.fr"  # Identifiant SSH de votre VPS cible
+target = "user@192.168.0.1"  # Identifiant SSH de votre VPS cible
 path = "/var/www/mon_projet"    # Destination absolue du dossier distant
 sync_env = true                 # Autoriser la synchro interactive du .env.toml
 build_locally = false           # Si true, délègue uniquement l'artefact pré-compilé pour soulager le VPS
