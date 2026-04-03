@@ -18,28 +18,17 @@ def _backend_env(backend_path: Path) -> dict:
     env.pop("CONDA_PREFIX", None)
     return env
 
-def run_reload(cfg: JaspeConfig, target: Path, clean_cache: bool = False) -> bool:
+def run_reload(cfg: JaspeConfig, target: Path, clean_cache: bool = False, perform_stop: bool = False) -> bool:
     name = cfg.config.app_name
-    service = f"jaspe-{name}.service"
     
-    # 1. Audit d'état
-    # On utilise systemctl --user is-active pour savoir si le service tourne
-    res = subprocess.run(["systemctl", "--user", "is-active", service], capture_output=True, text=True)
-    was_active = res.stdout.strip() == "active"
-    
-    # 2. Confirmation
+    # 1. Confirmation
     if not Confirm.ask(f"[bold yellow]⚠️  Attention : Cette opération va supprimer et reconstruire l'environnement de '{name}'. Continuer ?[/]"):
-        raise typer.Exit()
+        return False
 
-    # 3. Arrêt si besoin
-    if was_active:
-        run_with_spinner(["systemctl", "--user", "stop", service], f"Arrêt de l'application '{name}'")
-        for cron in cfg.crons:
-            timer_name = f"jaspe-{name}-{cron.name}.timer"
-            run_with_spinner(["systemctl", "--user", "stop", timer_name], f"Arrêt du cron {cron.name}", check=False)
+    if perform_stop:
         registry.add_or_update_app(name, str(target), cfg.config.app_port, "reloading")
 
-    # 4. Nettoyage Backend
+    # 2. Nettoyage Backend
     backend_path = target / cfg.config.backend_folder
     venv_path = backend_path / ".venv"
     
@@ -79,4 +68,4 @@ def run_reload(cfg: JaspeConfig, target: Path, clean_cache: bool = False) -> boo
     run_with_spinner(["npm", "install"], "Réinstallation fraîche des modules Node", cwd=str(frontend_path))
 
     console.print(f"\n[bold green]✓[/bold green] Réinitialisation de l'application '{name}' terminée.")
-    return was_active
+    return True

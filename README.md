@@ -73,6 +73,7 @@ Déployer une application fullstack **FastAPI + React** sur un serveur Linux ne 
 - **Réinitialisation Profonde (`jaspe reload`)** — Une commande de "Hard-Reset" qui nettoie les environnements (`.venv` et `node_modules`) et les reconstruit de zéro tout en préservant l'état actif de l'application.
 - **Variables d'environnement dynamiques** — Fichier `.env.toml` centralisé avec un **Live-Reload** qui redémarre Uvicorn et Vite sur écoute.
 - **UX Terminal** — Aucun log verbeux ("npm install", "uv sync", etc). Jaspe s'exécute silencieusement derrière d'élégants chargeurs animés et ne vous interrompt que via des boîtes de dialogue claires en cas d'erreur.
+- **Audit d'Intégrité** — Jaspe surveille désormais vos fichiers de configuration (`jaspe.toml`, `requirements.txt`, etc.) via un système de hashing SHA-256. Toute modification manuelle est détectée au démarrage et une synchronisation via `reload` vous est proposée pour garantir la cohérence de l'environnement.
 
 ---
 
@@ -120,12 +121,14 @@ jaspe init https://github.com/user/repo.git
 # Réinitialiser l'environnement (Hard-Reset)
 jaspe reload mon-projet
 
-# Lancer en développement
+# Lancer en développement (avec Audit d'Intégrité)
 jaspe start dev
 
-# Déployer en production
+# Déployer en production (avec Audit d'Intégrité)
 jaspe start prod
 ```
+
+> **Audit d'Intégrité :** Jaspe vérifie automatiquement si vos fichiers de configuration ont été modifiés manuellement. En cas de détection, il vous proposera un `jaspe reload` pour synchroniser proprement vos environnements virtuels.
 
 ---
 
@@ -260,19 +263,19 @@ Affiche un tableau de toutes les applications enregistrées avec leur nom, port,
 
 #### `jaspe reload [app_name] [--clean-cache]`
 
-Réinitialise complètement l'environnement de l'application (Hard-Reset). Cette commande est utile si les environnements sont corrompus ou si vous changez drastiquement de version.
+Réinitialise complètement l'environnement de l'application (Hard-Reset). Cette commande est la solution ultime en cas d'environnements corrompus ou de changements majeurs de configuration (`jaspe.toml`, `requirements.txt`).
 
-1. **Audit d'État** : Identifie si l'application est actuellement active.
-2. **Nettoyage** : Supprime physiquement les dossiers `.venv` (backend) et `node_modules` (frontend) ainsi que les dossiers de build (`dist/`).
+1. **Audit & Désinstallation** : Identifie si l'application est active et effectue un `jaspe remove` complet (arrêt et suppression des services SystemD et Crons, retrait du registre).
+2. **Nettoyage Physique** : Supprime les dossiers `.venv` (backend) et `node_modules` (frontend) ainsi que les dossiers de build (`dist/`).
 3. **Cache (Optionnel)** : Si `--clean-cache` est utilisé, vide les caches globaux de `uv` et `npm`.
-4. **Reconstruction** : Recrée un venv propre et réinstalle toutes les dépendances backend et frontend (pinned).
-5. **Auto-Relance** : Redémarre automatiquement l'application (en mode production) si elle était active avant le reload.
+4. **Reconstruction** : Recrée un venv propre, réinstalle toutes les dépendances (pinned) et met à jour les empreintes d'intégrité.
+5. **Auto-Relance** : Redémarre automatiquement l'application proprement en mode production si elle était active avant le reload, appliquant instantanément vos nouveaux paramètres (crons, ports).
 
 #### `jaspe check-update`
 
 Compare le commit local avec le commit distant de la branche configurée via `git fetch`.
 
-#### `jaspe update [app_name]`
+#### `jaspe update [app_name] [--reload] [--skip-build]`
 
 Workflow séquentiel de mise à jour :
 
@@ -281,12 +284,14 @@ Workflow séquentiel de mise à jour :
 3. `git pull`.
 4. Synchronisation des dépendances (`uv pip install` + `npm ci`).
 5. Migrations Alembic (si `migrations_dir` est configuré).
-6. Build du frontend.
+6. Build du frontend (sauf si `--skip-build` est présent).
 7. Redémarrage du service.
 
 > **Rollback Automatique :** En cas d'erreur de lint/build (Étape 6) ou de crash des migrations base de données (Étape 5), Jaspe intercepte l'erreur, annule la mise à jour Git (`git reset --hard`) et redémarre proprement l'ancienne version saine pour protéger la production.
 
-#### `jaspe deploy`
+> **Deep Update :** L'option `--reload` force la suppression du `.venv` et des `node_modules` distants avant la mise à jour, garantissant une cohérence totale.
+
+#### `jaspe deploy [app_name] [--reload] [--skip-build]`
 
 Déploie intégralement votre application sur un serveur SSH distant de façon automatisée et interactive :
 1. **Audit & Auto-Installer :** Jaspe vérifie via SSH que la cible possède les prérequis. S'il s'agit d'un VPS vierge, un menu interactif CLI propose de télécharger et configurer de façon autonome `uv` et `jaspe` sur la cible.
@@ -294,7 +299,9 @@ Déploie intégralement votre application sur un serveur SSH distant de façon a
 3. **Fusion Multi-Voies des Secrets :** Identifie si le serveur cache déjà un fichier `.env.toml`. Si oui, une invite à choix multiple (Écraser / Ignorer / Fusion priorité locale / Fusion priorité lointaine) résout élégamment le conflit d'environnement via des fusions de dictionnaires TOML en arrière-plan.
 4. **Target Ignition :** Active le boot `jaspe start prod` déporté, installant le Service SystemD automatiquement à distance.
 
-> **TIPS `build_locally` :** Si votre VPS est une instance budget souffrant d'1Go de RAM, l'installation de NodeJS n'est plus obligatoire. Indiquez `build_locally = true` dans `.toml` — Jaspe compilera le lourd package React *sur votre PC*, puis déploiera l'artefact fini sur le port `/dist/` du serveur, libérant drastiquement les processeurs de votre infrastructure !
+> **TIPS `build_locally` :** Si votre VPS est une instance budget souffrant d'1Go de RAM, l'installation de NodeJS n'est plus obligatoire. Indiquez `build_locally = true` dans `.toml` — Jaspe compilera le lourd package React *sur votre PC*, puis déploiera l'artefact fini sur le port `/dist/` du serveur, libérant drastiquement les processeurs de votre infrastructure ! 
+> 
+> **Note sur le Reload Distant :** Utiliser `--reload` lors d'un déploiement force la réinitialisation de l'environnement Python distant (et Node si buildé sur le serveur), assurant un déploiement "frais" sans résidus d'anciennes versions.
 
 #### `jaspe front-add [-D/--dev] <paquet>`
 
@@ -321,6 +328,12 @@ Le coeur de la philosophie **No-Touch**. Lors d'un `jaspe start prod`, Jaspe gé
 - Gère le fallback 404 pour le routage SPA de React.
 
 Ce fichier n'est jamais versionné et est régénéré à chaque déploiement.
+
+### L'Audit d'Intégrité
+
+À chaque opération modifiant l'environnement (`init`, `reload`, `update`, `back-add`, `front-add`), Jaspe calcule et stocke les empreintes SHA-256 de vos fichiers de configuration dans `.jaspe/hashes.json`. 
+
+Si vous modifiez manuellement un fichier comme `requirements.txt` sans passer par les commandes Jaspe dédiées, l'outil détectera la dérive lors du prochain `start` ou `deploy` et vous alertera pour éviter tout conflit entre votre code et vos bibliothèques installées.
 
 ### Le Registre Global
 
@@ -468,7 +481,8 @@ jaspe/
         ├── dev_server.py       # Serveur de développement (Vite + Uvicorn)
         ├── prod_server.py      # Deploiement production (wrapper ASGI + systemd)
         ├── reload_cmd.py       # Reinitialisation profonde de l'environnement
-        └── updater.py          # Systeme de mise a jour (check-update / update)
+        ├── updater.py          # Systeme de mise a jour (check-update / update)
+        └── integrity.py        # Audit d'intégrité par hashing des fichiers
 ```
 
 ---

@@ -4,6 +4,7 @@ from pathlib import Path
 from rich.console import Console
 from jaspe.ui import run_with_spinner
 from jaspe.config import JaspeConfig
+from jaspe import registry
 
 console = Console()
 
@@ -234,3 +235,60 @@ def install_systemd_crons(config: JaspeConfig, project_path: Path, env: dict) ->
         run_with_spinner(["systemctl", "--user", "start", timer_name], f"Démarrage de l'horloge '{timer_name}'")
         
         console.print(f"[green]✓ Cron Timer '{timer_name}' solidement arrimé en arrière-plan.[/green]")
+
+
+def remove_app_production(cfg: JaspeConfig, target: Path) -> None:
+    """Arrête et supprime tous les composants de production (SystemD + Registre)."""
+    name = cfg.config.app_name
+    service = f"jaspe-{name}.service"
+    user_systemd_dir = Path("~/.config/systemd/user").expanduser()
+
+    # 1. Arrêt du service principal
+    run_with_spinner(["systemctl", "--user", "stop", service], f"Arrêt du service '{service}'", check=False)
+    run_with_spinner(["systemctl", "--user", "disable", service], f"Désactivation du service '{service}'", check=False)
+    
+    service_file = user_systemd_dir / service
+    if service_file.exists():
+        service_file.unlink()
+        
+    # 2. Arrêt des crons
+    for cron in cfg.crons:
+        timer_name = f"jaspe-{name}-{cron.name}.timer"
+        service_cron = f"jaspe-{name}-{cron.name}.service"
+        run_with_spinner(["systemctl", "--user", "stop", timer_name], f"Arrêt du timer {cron.name}", check=False)
+        run_with_spinner(["systemctl", "--user", "disable", timer_name], f"Désactivation du timer {cron.name}", check=False)
+        t_path = user_systemd_dir / timer_name
+        s_path = user_systemd_dir / service_cron
+        if t_path.exists(): t_path.unlink()
+        if s_path.exists(): s_path.unlink()
+        
+    # 3. Cleanup SystemD
+    run_with_spinner(["systemctl", "--user", "daemon-reload"], "Nettoyage du cache SystemD local", check=False)
+        
+    # 4. Registre
+    registry.remove_app(name)
+    console.print(f"[green]Application '{name}' retirée de la production.[/green]")
+
+
+def start_app_production(cfg: JaspeConfig, target: Path, skip_build: bool = False) -> None:
+    """Orchestre le build et le lancement en production."""
+    from jaspe.env_manager import build_env_for_section
+    import getpass
+    
+    front_env = build_env_for_section("frontend", target / ".env.toml", target)
+    back_env = build_env_for_section("backend", target / ".env.toml", target)
+
+    if not skip_build:
+        run_npm_build(target / cfg.config.frontend_folder, front_env)
+    
+    write_runner(target, cfg)
+    dry_run_asgi(target, cfg, back_env)
+
+    user = getpass.getuser()
+    service_content = generate_systemd_service_string(cfg, target, back_env, user)
+    install_systemd_service(cfg.config.app_name, service_content)
+    install_systemd_crons(cfg, target, back_env)
+    
+    # Enregistrement
+    registry.add_or_update_app(cfg.config.app_name, str(target), cfg.config.app_port, "active")
+    console.print(f"\n[bold green]🚀 Application '{cfg.config.app_name}' lancée en production ![/]")

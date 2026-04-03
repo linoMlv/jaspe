@@ -96,7 +96,7 @@ def run_npm_build(frontend_path: Path) -> None:
     run_with_spinner(["npm", "run", "build"], "Build du frontend", cwd=str(frontend_path))
 
 
-def run_full_update(config: JaspeConfig, project_path: Path) -> None:
+def run_full_update(config: JaspeConfig, project_path: Path, reload: bool = False, skip_build: bool = False) -> None:
     app_name = config.config.app_name
     service = f"jaspe-{app_name}.service"
     backend_path = project_path / config.config.backend_folder
@@ -118,6 +118,15 @@ def run_full_update(config: JaspeConfig, project_path: Path) -> None:
     # 3. Pull
     run_git_pull(project_path)
 
+    if reload:
+        # Nettoyage profond des environnements
+        venv_path = backend_path / ".venv"
+        node_modules = frontend_path / "node_modules"
+        if venv_path.exists():
+            run_with_spinner(["rm", "-rf", str(venv_path)], "Suppression du Venv (Reload)")
+        if node_modules.exists():
+            run_with_spinner(["rm", "-rf", str(node_modules)], "Suppression de node_modules (Reload)")
+
     # 4. Venv + Dépendances
     from jaspe.env_manager import ensure_python_venv
     ensure_python_venv(config.environment.python_version, backend_path)
@@ -128,7 +137,9 @@ def run_full_update(config: JaspeConfig, project_path: Path) -> None:
     try:
         if config.backend.migrations_dir:
             run_alembic_upgrade(backend_path, config.backend.migrations_dir)
-        run_npm_build(frontend_path)
+        
+        if not skip_build:
+            run_npm_build(frontend_path)
     except Exception as e:
         console.print(f"[red]Échec de la mise à jour ({e}). Déclenchement du Rollback...[/red]")
         if old_commit:

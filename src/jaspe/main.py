@@ -10,6 +10,7 @@ from rich.prompt import Confirm
 from jaspe import registry, __version__
 from jaspe.ui import run_with_spinner
 from jaspe.config import load_config
+from jaspe.integrity import audit_and_prompt_reload, update_stored_hashes
 
 
 def version_callback(value: bool):
@@ -74,9 +75,16 @@ def init(url: str = typer.Argument(None, help="URL du dépôt Git à cloner")):
 
     if url:
         repo_name = url.rstrip("/").split("/")[-1].removesuffix(".git")
-        init_from_clone(url, target / repo_name)
+        final_target = target / repo_name
+        init_from_clone(url, final_target)
+        # Update hashes after clone
+        cfg = load_config(final_target / "jaspe.toml")
+        update_stored_hashes(final_target, cfg)
     else:
         init_from_scratch(target)
+        # Update hashes after scratch init
+        cfg = load_config(target / "jaspe.toml")
+        update_stored_hashes(target, cfg)
 
 
 @app.command()
@@ -104,6 +112,9 @@ def start(
     target = resolve_target_dir()
     cfg = load_config(target / "jaspe.toml")
 
+    # 🛡️ Audit d'Intégrité
+    audit_and_prompt_reload(target, cfg)
+
     if not check_node_version(cfg.environment.node_version):
         raise typer.Exit(1)
 
@@ -124,23 +135,8 @@ def start(
             share,
         )
     elif mode == "prod":
-        import getpass
-
-        if not skip_build:
-            run_npm_build(target / cfg.config.frontend_folder, front_env)
-        write_runner(target, cfg)
-        dry_run_asgi(target, cfg, back_env)
-
-        user = getpass.getuser()
-        service_content = generate_systemd_service_string(
-            cfg, target, back_env, user
-        )
-        install_systemd_service(cfg.config.app_name, service_content)
-        install_systemd_crons(cfg, target, back_env)
-        registry.add_or_update_app(
-            cfg.config.app_name, str(target), cfg.config.app_port, "active"
-        )
-        console.print(f"[green]Application '{cfg.config.app_name}' déployée en production ![/green]")
+        from jaspe.prod_server import start_app_production
+        start_app_production(cfg, target, skip_build=skip_build)
     else:
         console.print(f"[red]Mode inconnu : '{mode}'. Utilisez 'dev' ou 'prod'.[/red]")
         raise typer.Exit(1)
@@ -181,49 +177,35 @@ def list_apps():
 
     console.print(table)
 
-
 @app.command()
 def remove(app_name: str = typer.Argument(None, help="Nom de l'application")):
     """Supprime une application du registre et de systemd."""
-    import subprocess
+    from jaspe.prod_server import remove_app_production
 
     target = resolve_target_dir(app_name)
     cfg = load_config(target / "jaspe.toml")
-    name = cfg.config.app_name
-    service = f"jaspe-{name}.service"
-
-    run_with_spinner(["systemctl", "--user", "stop", service], "Arrêt du service", check=False)
-    run_with_spinner(["systemctl", "--user", "disable", service], "Désactivation du service", check=False)
-    
-    user_systemd_dir = Path("~/.config/systemd/user").expanduser()
-    service_file = user_systemd_dir / service
-    if service_file.exists():
-        service_file.unlink()
-        
-    for cron in cfg.crons:
-        timer_name = f"jaspe-{name}-{cron.name}.timer"
-        service_cron = f"jaspe-{name}-{cron.name}.service"
-        run_with_spinner(["systemctl", "--user", "stop", timer_name], f"Arrêt du timer {cron.name}", check=False)
-        run_with_spinner(["systemctl", "--user", "disable", timer_name], f"Désactivation du timer {cron.name}", check=False)
-        t_path = user_systemd_dir / timer_name
-        s_path = user_systemd_dir / service_cron
-        if t_path.exists(): t_path.unlink()
-        if s_path.exists(): s_path.unlink()
-        
-    run_with_spinner(["systemctl", "--user", "daemon-reload"], "Nettoyage du cache SystemD local", check=False)
-        
-    registry.remove_app(name)
-    console.print(f"[green]Application '{name}' supprimée du registre.[/green]")
+    remove_app_production(cfg, target)
 
 
 @app.command()
-def update(app_name: str = typer.Argument(None, help="Nom de l'application")):
+def update(
+    app_name: str = typer.Argument(None, help="Nom de l'application"),
+    reload: bool = typer.Option(False, "--reload", help="Réinitialiser l'environnement avant la mise à jour"),
+    skip_build: bool = typer.Option(False, "--skip-build", help="Passer l'étape de build du frontend")
+):
     """Met à jour une application déployée."""
     from jaspe.updater import run_full_update
 
     target = resolve_target_dir(app_name)
     cfg = load_config(target / "jaspe.toml")
-    run_full_update(cfg, target)
+    
+    # 🛡️ Audit d'Intégrité
+    audit_and_prompt_reload(target, cfg)
+    
+    run_full_update(cfg, target, reload=reload, skip_build=skip_build)
+    
+    # Update hashes after successful update
+    update_stored_hashes(target, cfg)
 
 
 @app.command()
@@ -233,37 +215,50 @@ def reload(
 ):
     """Réinitialise complètement l'environnement de l'application (Hard-Reset)."""
     from jaspe.reload_cmd import run_reload
+    from jaspe.prod_server import remove_app_production, start_app_production
 
     target = resolve_target_dir(app_name)
     cfg = load_config(target / "jaspe.toml")
     
-    was_active = run_reload(cfg, target, clean_cache=clean_cache)
+    # 1. Audit d'état pou savoir s'il faut relancer à la fin
+    name = cfg.config.app_name
+    service = f"jaspe-{name}.service"
+    import subprocess
+    res = subprocess.run(["systemctl", "--user", "is-active", service], capture_output=True, text=True)
+    was_active = res.stdout.strip() == "active"
+
+    # 2. Reload logic (Confirmation + Filesystem reset & Install)
+    # On passe was_active=False à run_reload car on va gérer le stop/start proprement ici via remove/start_production
+    success = run_reload(cfg, target, clean_cache=clean_cache, perform_stop=was_active)
     
-    if was_active:
-        # On relance en mode prod
-        # On simule un appel à start(mode="prod", skip_build=False)
-        # Mais on peut juste ré-exécuter la logique simplifiée ici ou appeler start
+    if success and was_active:
         console.print("[blue]Relance de l'application en mode production...[/blue]")
-        # ctx = typer.Context(app, obj={})
-        # start(mode="prod", skip_build=False) # Direct call might work but we need envs
-        # Pour éviter de tout réimporter, on peut juste dire à l'utilisateur de start 
-        # ou utiliser un subprocess local jaspe start prod
-        subprocess.run(["jaspe", "start", "prod"], cwd=str(target))
+        start_app_production(cfg, target, skip_build=False)
+        
+    # Update hashes after successful reload
+    update_stored_hashes(target, cfg)
 
 
 @app.command()
-def deploy():
+def deploy(
+    app_name: str = typer.Argument(None, help="Nom de l'application"),
+    reload: bool = typer.Option(False, "--reload", help="Réinitialiser l'environnement distant lors du déploiement"),
+    skip_build: bool = typer.Option(False, "--skip-build", help="Passer l'étape de build du frontend lors du déploiement (utile si déjà buildé localement)")
+):
     """Déploie intégralement l'application sur un VPS distant."""
     from jaspe.deployer import run_deploy
 
-    target = resolve_target_dir()
+    target = resolve_target_dir(app_name)
     cfg = load_config(target / "jaspe.toml")
+
+    # 🛡️ Audit d'Intégrité
+    audit_and_prompt_reload(target, cfg)
 
     if not cfg.deploy.target or not cfg.deploy.path:
         console.print("[red]Erreur : La section [deploy] (target et path) doit être configurée dans jaspe.toml.[/red]")
         raise typer.Exit(1)
 
-    run_deploy(cfg, target)
+    run_deploy(cfg, target, reload=reload, skip_build=skip_build)
 
 
 @app.command("check-update")
@@ -288,6 +283,9 @@ def front_add(
     cfg = load_config(target / "jaspe.toml")
     frontend_path = target / cfg.config.frontend_folder
     install_npm_exact(pkg, frontend_path, dev=dev)
+    
+    # Update hashes after adding dependency
+    update_stored_hashes(target, cfg)
 
 
 @app.command("back-add")
@@ -299,6 +297,9 @@ def back_add(pkg: str = typer.Argument(..., help="Nom du paquet Python")):
     cfg = load_config(target / "jaspe.toml")
     backend_path = target / cfg.config.backend_folder
     add_backend_package(pkg, backend_path)
+    
+    # Update hashes after adding dependency
+    update_stored_hashes(target, cfg)
 
 
 @db_app.command("make")

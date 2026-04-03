@@ -37,7 +37,7 @@ def dump_toml(d: dict) -> str:
     return "\n".join(lines)
 
 
-def run_deploy(cfg: JaspeConfig, target: Path):
+def run_deploy(cfg: JaspeConfig, target: Path, reload: bool = False, skip_build: bool = False):
     host_target = cfg.deploy.target
     remote_path = cfg.deploy.path
     
@@ -102,7 +102,7 @@ def run_deploy(cfg: JaspeConfig, target: Path):
             run_ssh_with_spinner(host_target, f"jaspe init '{repo_url}' '{remote_path}'", "Clonage distant interactif (jaspe init)")
         else:
             run_ssh_with_spinner(host_target, f"mkdir -p {remote_path}", "Création du dossier hôte")
-            if cfg.deploy.build_locally:
+            if cfg.deploy.build_locally and not skip_build:
                 front_path = target / cfg.config.frontend_folder
                 run_with_spinner(["npm", "run", "build"], "Build local du frontend React/Vite", cwd=str(front_path))
                 
@@ -124,10 +124,12 @@ def run_deploy(cfg: JaspeConfig, target: Path):
                 run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.frontend_folder} && npm install", "Installation distante des dépendances Node")
     else:
         console.print("[blue]L'application existe déjà sur le serveur.[/blue]")
+        reload_flag = " --reload" if reload else ""
+        skip_build_flag = " --skip-build" if skip_build else ""
         if not cfg.deploy.build_locally and repo_url:
-            run_ssh_with_spinner(host_target, f"cd {remote_path} && jaspe update", "Mise à jour Intelligente (jaspe update) sur le serveur")
+            run_ssh_with_spinner(host_target, f"cd {remote_path} && jaspe update{reload_flag}{skip_build_flag}", "Mise à jour Intelligente (jaspe update) sur le serveur")
         else:
-            if cfg.deploy.build_locally:
+            if cfg.deploy.build_locally and not skip_build:
                 front_path = target / cfg.config.frontend_folder
                 run_with_spinner(["npm", "run", "build"], "Build local du frontend React/Vite", cwd=str(front_path))
                 
@@ -144,6 +146,10 @@ def run_deploy(cfg: JaspeConfig, target: Path):
                 str(target) + "/", f"{host_target}:{remote_path}/"
             ])
             run_with_spinner(cmd_rsync, "Envoi Rapide Rsync des modifs (Update local)")
+            
+            if reload:
+                run_ssh_with_spinner(host_target, f"rm -rf {remote_path}/{cfg.config.backend_folder}/.venv", "Nettoyage distant du Venv (Reload)")
+                
             run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.backend_folder} && ( [ -d .venv ] || uv venv ) && uv pip install -r requirements.txt", "Mise à jour distante des dépendances Python")
             if not cfg.deploy.build_locally:
                 run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.frontend_folder} && npm install", "Mise à jour distante des dépendances Node")
@@ -208,6 +214,6 @@ def run_deploy(cfg: JaspeConfig, target: Path):
             
     # Phase 4: Run Process
     console.print("\n[bold yellow]--- Phase 4 : Lancement / Bascule ---[/bold yellow]")
-    skip_flag = " --skip-build" if cfg.deploy.build_locally else ""
+    skip_flag = " --skip-build" if (cfg.deploy.build_locally or skip_build) else ""
     run_ssh_with_spinner(host_target, f"cd {remote_path} && jaspe start prod{skip_flag}", "Exécution finale globale (jaspe start prod)")
     console.print("\n[bold green]🚀 Mission Accomplie ! L'application tourne en Remote Production.[/]")
