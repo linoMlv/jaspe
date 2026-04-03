@@ -70,6 +70,7 @@ Déployer une application fullstack **FastAPI + React** sur un serveur Linux ne 
 - **Gestion des dépendances** — `jaspe front-add` et `jaspe back-add` installent les paquets avec versionnage strict et reproductible.
 - **Mise à jour et Auto-Rollback** — `jaspe update` orchestre le pull, les migrations, le build et le redémarrage, avec annulation `git reset` si le build crashe (Zero Downtime).
 - **Registre global et Logs distants** — Gérez et monitorez vos applications avec `jaspe list`, `jaspe stop`, `jaspe remove` et `jaspe logs`.
+- **Réinitialisation Profonde (`jaspe reload`)** — Une commande de "Hard-Reset" qui nettoie les environnements (`.venv` et `node_modules`) et les reconstruit de zéro tout en préservant l'état actif de l'application.
 - **Variables d'environnement dynamiques** — Fichier `.env.toml` centralisé avec un **Live-Reload** qui redémarre Uvicorn et Vite sur écoute.
 - **UX Terminal** — Aucun log verbeux ("npm install", "uv sync", etc). Jaspe s'exécute silencieusement derrière d'élégants chargeurs animés et ne vous interrompt que via des boîtes de dialogue claires en cas d'erreur.
 
@@ -115,6 +116,9 @@ jaspe init
 
 # Ou cloner un projet existant
 jaspe init https://github.com/user/repo.git
+
+# Réinitialiser l'environnement (Hard-Reset)
+jaspe reload mon-projet
 
 # Lancer en développement
 jaspe start dev
@@ -204,7 +208,7 @@ path = "/var/www/abacus"
 
 | Variante | Comportement |
 |---|---|
-| Sans argument | Crée l'arborescence (`backend/`, `frontend/`), génère `jaspe.toml`, `.env.toml`, initialise Git, crée le venv, lance `npm init`, et scaffold le Pipeline Github Actions CI. |
+| Sans argument | Crée l'arborescence (`backend/`, `frontend/`), génère `jaspe.toml`, `.env.toml`, initialise Git, crée le venv, lance `npm init`, et scaffold le Pipeline Github Actions CI. **Note :** Si un projet existe déjà, il vous sera proposé un `jaspe reload` au lieu d'écraser les fichiers. |
 | Avec URL Git | Clone le repo, vérifie la présence de `jaspe.toml`, installe les dépendances (`uv pip install` + `npm ci`), crée un `.env.toml` vide. |
 
 #### `jaspe start dev [--share]`
@@ -253,6 +257,16 @@ Affiche un tableau de toutes les applications enregistrées avec leur nom, port,
 │ mon_projet    │ 8000 │ /var/www/mon_projet     │ active  │
 └───────────────┴──────┴─────────────────────────┴─────────┘
 ```
+
+#### `jaspe reload [app_name] [--clean-cache]`
+
+Réinitialise complètement l'environnement de l'application (Hard-Reset). Cette commande est utile si les environnements sont corrompus ou si vous changez drastiquement de version.
+
+1. **Audit d'État** : Identifie si l'application est actuellement active.
+2. **Nettoyage** : Supprime physiquement les dossiers `.venv` (backend) et `node_modules` (frontend) ainsi que les dossiers de build (`dist/`).
+3. **Cache (Optionnel)** : Si `--clean-cache` est utilisé, vide les caches globaux de `uv` et `npm`.
+4. **Reconstruction** : Recrée un venv propre et réinstalle toutes les dépendances backend et frontend (pinned).
+5. **Auto-Relance** : Redémarre automatiquement l'application (en mode production) si elle était active avant le reload.
 
 #### `jaspe check-update`
 
@@ -453,6 +467,7 @@ jaspe/
         ├── env_manager.py      # Vérification des versions et fusion .env.toml
         ├── dev_server.py       # Serveur de développement (Vite + Uvicorn)
         ├── prod_server.py      # Deploiement production (wrapper ASGI + systemd)
+        ├── reload_cmd.py       # Reinitialisation profonde de l'environnement
         └── updater.py          # Systeme de mise a jour (check-update / update)
 ```
 
