@@ -1,6 +1,6 @@
 [project]
 name = "jaspe"
-version = "1.0.0"
+version = "1.0.5"
 description = "Outil CLI de déploiement pour FastAPI + Vite/React/TypeScript"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -5,6 +5,7 @@ import typer
 from rich.console import Console
 
 from rich.console import Console
+from rich.prompt import Confirm
 
 from jaspe import registry, __version__
 from jaspe.ui import run_with_spinner
@@ -51,8 +52,26 @@ def resolve_target_dir(app_name: str | None = None) -> Path:
 def init(url: str = typer.Argument(None, help="URL du dépôt Git à cloner")):
     """Initialise un nouveau projet ou clone un projet existant."""
     from jaspe.init_cmd import init_from_clone, init_from_scratch
+    from jaspe.reload_cmd import run_reload
 
     target = Path(os.getcwd())
+    
+    # 🛡️ Protection : Si un projet existe déjà
+    if not url and (target / "jaspe.toml").exists():
+        console.print("[yellow]⚠️  Un projet Jaspe est déjà présent dans ce dossier.[/yellow]")
+        if Confirm.ask("Souhaitez-vous réinitialiser l'environnement (reload) de ce projet à la place ?"):
+            cfg = load_config(target / "jaspe.toml")
+            # Appel de la logique de reload avec redirection si c'était actif
+            was_active = run_reload(cfg, target)
+            if was_active:
+                console.print("[blue]Relance de l'application en mode production...[/blue]")
+                import subprocess
+                subprocess.run(["jaspe", "start", "prod"], cwd=str(target))
+            return
+        else:
+            console.print("[red]Opération annulée pour protéger le projet existant.[/red]")
+            raise typer.Exit()
+
     if url:
         repo_name = url.rstrip("/").split("/")[-1].removesuffix(".git")
         init_from_clone(url, target / repo_name)
@@ -205,6 +224,31 @@ def update(app_name: str = typer.Argument(None, help="Nom de l'application")):
     target = resolve_target_dir(app_name)
     cfg = load_config(target / "jaspe.toml")
     run_full_update(cfg, target)
+
+
+@app.command()
+def reload(
+    app_name: str = typer.Argument(None, help="Nom de l'application"),
+    clean_cache: bool = typer.Option(False, "--clean-cache", help="Vider les caches globaux UV et NPM")
+):
+    """Réinitialise complètement l'environnement de l'application (Hard-Reset)."""
+    from jaspe.reload_cmd import run_reload
+
+    target = resolve_target_dir(app_name)
+    cfg = load_config(target / "jaspe.toml")
+    
+    was_active = run_reload(cfg, target, clean_cache=clean_cache)
+    
+    if was_active:
+        # On relance en mode prod
+        # On simule un appel à start(mode="prod", skip_build=False)
+        # Mais on peut juste ré-exécuter la logique simplifiée ici ou appeler start
+        console.print("[blue]Relance de l'application en mode production...[/blue]")
+        # ctx = typer.Context(app, obj={})
+        # start(mode="prod", skip_build=False) # Direct call might work but we need envs
+        # Pour éviter de tout réimporter, on peut juste dire à l'utilisateur de start 
+        # ou utiliser un subprocess local jaspe start prod
+        subprocess.run(["jaspe", "start", "prod"], cwd=str(target))
 
 
 @app.command()

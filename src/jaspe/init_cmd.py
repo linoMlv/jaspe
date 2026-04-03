@@ -7,6 +7,7 @@ from rich.console import Console
 from jaspe.config import check_if_toml_exists, load_config
 from jaspe.env_manager import _extract_min_python_version
 from jaspe.ui import run_with_spinner
+from jaspe.deps import add_backend_package
 
 
 def _backend_env(backend_dir: Path) -> dict:
@@ -170,13 +171,13 @@ def init_from_scratch(target: Path) -> None:
     run_uv_init(backend_dir, py_version)
     generate_default_fastapi_main(backend_dir)
     
+    # Installation des dépendances de base (avec pinning automatique)
+    add_backend_package("fastapi", backend_dir)
+    add_backend_package("uvicorn", backend_dir)
+    
     # Intégration Continue (CI/CD Scaffold)
     generate_github_actions_ci(target, app_name)
     
-    # Ensure venv is populated
-    from jaspe.updater import run_uv_pip_sync
-    run_uv_pip_sync(backend_dir)
-
     # Frontend : npm create vite
     run_npm_init_vite(target, "frontend")
 
