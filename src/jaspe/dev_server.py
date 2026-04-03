@@ -71,7 +71,7 @@ def run_dev(
         tunnel_proc = None
         if share:
             front_port = front_env.get("PORT", "5173")
-            console.print(f"[magenta]Lancement du tunnel localtunnel sur le port {front_port}...[/magenta]")
+            console.print(f"[magenta]Launching localtunnel on port {front_port}...[/magenta]")
             tunnel_proc = subprocess.Popen(
                 ["npx", "--yes", "localtunnel", "--port", str(front_port)],
                 stdout=subprocess.PIPE,
@@ -100,7 +100,7 @@ def run_dev(
                 # Watch Config Files
                 current_mtimes = get_mtimes(target)
                 if current_mtimes != last_mtimes:
-                    console.print("\n[yellow]Configuration modifiée. Redémarrage...[/yellow]")
+                    console.print("\n[yellow]Configuration changed. Restarting...[/yellow]")
                     last_mtimes = current_mtimes
                     restarting = True
                     break
@@ -119,7 +119,7 @@ def run_dev(
                 else:
                     console.print(f"[green]\\[BACK ][/green] {line}")
         except KeyboardInterrupt:
-            console.print("\n[yellow]Arrêt des serveurs...[/yellow]")
+            console.print("\n[yellow]Stopping servers...[/yellow]")
             restarting = False
         finally:
             if tunnel_proc:

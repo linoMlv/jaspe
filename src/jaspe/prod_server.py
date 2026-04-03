@@ -100,7 +100,7 @@ WantedBy=timers.target
 def run_npm_build(frontend_path: Path, env: dict) -> None:
     run_with_spinner(
         ["npm", "run", "build"],
-        "Build du frontend pour la production",
+        "Building frontend for production...",
         cwd=str(frontend_path),
         env=env,
     )
@@ -166,7 +166,7 @@ def dry_run_asgi(project_path: Path, config: JaspeConfig, env: dict) -> None:
     venv_python = str(project_path / config.config.backend_folder / ".venv" / "bin" / "python")
     run_with_spinner(
         [venv_python, "-c", "import runner"],
-        "Audit de santé de l'application (Dry-Run)",
+        "Performing application health check (Dry-Run)...",
         cwd=jaspe_dir,
         env=env,
     )
@@ -182,16 +182,16 @@ def install_systemd_service(app_name: str, service_content: str) -> None:
     target_path = user_systemd_dir / service_name
     target_path.write_text(service_content, encoding="utf-8")
 
-    run_with_spinner(["systemctl", "--user", "daemon-reload"], "Rechargement du Daemon SystemD local")
-    run_with_spinner(["systemctl", "--user", "enable", service_name], f"Activation permanente du service '{service_name}'")
-    run_with_spinner(["systemctl", "--user", "start", service_name], f"Démarrage de l'application '{service_name}'")
+    run_with_spinner(["systemctl", "--user", "daemon-reload"], "Reloading local SystemD daemon...")
+    run_with_spinner(["systemctl", "--user", "enable", service_name], f"Enabling service '{service_name}'...")
+    run_with_spinner(["systemctl", "--user", "start", service_name], f"Starting application '{service_name}'...")
     
     # Ensure lingering is enabled for the current user
     import getpass
     user = getpass.getuser()
     subprocess.run(["loginctl", "enable-linger", user], check=False)
 
-    console.print(f"[green]Service systemd '{service_name}' démarré.[/green]")
+    console.print(f"[green]SystemD service '{service_name}' started.[/green]")
 
 
 def install_systemd_crons(config: JaspeConfig, project_path: Path, env: dict) -> None:
@@ -230,11 +230,11 @@ def install_systemd_crons(config: JaspeConfig, project_path: Path, env: dict) ->
         (user_systemd_dir / service_name).write_text(service_content, encoding="utf-8")
         (user_systemd_dir / timer_name).write_text(timer_content, encoding="utf-8")
         
-        run_with_spinner(["systemctl", "--user", "daemon-reload"], "Actualisation du lanceur de tâche SystemD")
-        run_with_spinner(["systemctl", "--user", "enable", timer_name], f"Activation du timer autonome '{timer_name}'")
-        run_with_spinner(["systemctl", "--user", "start", timer_name], f"Démarrage de l'horloge '{timer_name}'")
+        run_with_spinner(["systemctl", "--user", "daemon-reload"], "Updating SystemD task scheduler...")
+        run_with_spinner(["systemctl", "--user", "enable", timer_name], f"Enabling autonomous timer '{timer_name}'...")
+        run_with_spinner(["systemctl", "--user", "start", timer_name], f"Starting clock for '{timer_name}'...")
         
-        console.print(f"[green]✓ Cron Timer '{timer_name}' solidement arrimé en arrière-plan.[/green]")
+        console.print(f"[green]✓ Cron Timer '{timer_name}' scheduled in background.[/green]")
 
 
 def remove_app_production(cfg: JaspeConfig, target: Path) -> None:
@@ -243,31 +243,31 @@ def remove_app_production(cfg: JaspeConfig, target: Path) -> None:
     service = f"jaspe-{name}.service"
     user_systemd_dir = Path("~/.config/systemd/user").expanduser()
 
-    # 1. Arrêt du service principal
-    run_with_spinner(["systemctl", "--user", "stop", service], f"Arrêt du service '{service}'", check=False)
-    run_with_spinner(["systemctl", "--user", "disable", service], f"Désactivation du service '{service}'", check=False)
+    # 1. Stop primary service
+    run_with_spinner(["systemctl", "--user", "stop", service], f"Stopping service '{service}'...", check=False)
+    run_with_spinner(["systemctl", "--user", "disable", service], f"Disabling service '{service}'...", check=False)
     
     service_file = user_systemd_dir / service
     if service_file.exists():
         service_file.unlink()
         
-    # 2. Arrêt des crons
+    # 2. Stop crons
     for cron in cfg.crons:
         timer_name = f"jaspe-{name}-{cron.name}.timer"
         service_cron = f"jaspe-{name}-{cron.name}.service"
-        run_with_spinner(["systemctl", "--user", "stop", timer_name], f"Arrêt du timer {cron.name}", check=False)
-        run_with_spinner(["systemctl", "--user", "disable", timer_name], f"Désactivation du timer {cron.name}", check=False)
+        run_with_spinner(["systemctl", "--user", "stop", timer_name], f"Stopping timer {cron.name}...", check=False)
+        run_with_spinner(["systemctl", "--user", "disable", timer_name], f"Disabling timer {cron.name}...", check=False)
         t_path = user_systemd_dir / timer_name
         s_path = user_systemd_dir / service_cron
         if t_path.exists(): t_path.unlink()
         if s_path.exists(): s_path.unlink()
         
     # 3. Cleanup SystemD
-    run_with_spinner(["systemctl", "--user", "daemon-reload"], "Nettoyage du cache SystemD local", check=False)
+    run_with_spinner(["systemctl", "--user", "daemon-reload"], "Cleaning local SystemD cache...", check=False)
         
-    # 4. Registre
+    # 4. Registry
     registry.remove_app(name)
-    console.print(f"[green]Application '{name}' retirée de la production.[/green]")
+    console.print(f"[green]Application '{name}' removed from production.[/green]")
 
 
 def start_app_production(cfg: JaspeConfig, target: Path, skip_build: bool = False) -> None:
@@ -289,6 +289,6 @@ def start_app_production(cfg: JaspeConfig, target: Path, skip_build: bool = Fals
     install_systemd_service(cfg.config.app_name, service_content)
     install_systemd_crons(cfg, target, back_env)
     
-    # Enregistrement
+    # Registry entry
     registry.add_or_update_app(cfg.config.app_name, str(target), cfg.config.app_port, "active")
-    console.print(f"\n[bold green]🚀 Application '{cfg.config.app_name}' lancée en production ![/]")
+    console.print(f"\n[bold green]🚀 Application '{cfg.config.app_name}' launched in production![/]")

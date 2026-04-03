@@ -48,11 +48,11 @@ def check_node_version(required_version: str) -> bool:
         ok = _check_version(actual, required_version)
         if not ok:
             console.print(
-                f"[red]Node.js {actual} ne satisfait pas la contrainte {required_version}[/red]"
+                f"[red]Node.js version {actual} does not satisfy constraint {required_version}.[/red]"
             )
         return ok
     except FileNotFoundError:
-        console.print("[red]Node.js n'est pas installé.[/red]")
+        console.print("[red]Node.js is not installed.[/red]")
         return False
 
 
@@ -78,22 +78,22 @@ def ensure_python_venv(required_version: str, backend_path: Path) -> None:
         if result.returncode == 0:
             actual = result.stdout.strip().removeprefix("Python ")
             if _check_version(actual, required_version):
-                console.print(f"[green]Venv Python {actual} OK.[/green]")
+                console.print(f"[green]Python {actual} venv verified.[/green]")
                 return
             console.print(
-                f"[yellow]Le venv existant utilise Python {actual}, "
-                f"recréation avec Python {target_version}...[/yellow]"
+                f"[yellow]Existing venv uses Python {actual}. "
+                f"Recreating with Python {target_version}...[/yellow]"
             )
 
     console.print(
-        f"[blue]Création du venv avec Python {target_version} via uv...[/blue]"
+        f"[blue]Creating venv with Python {target_version} via uv...[/blue]"
     )
     subprocess.run(
         ["uv", "venv", "--python", target_version, "--clear"],
         cwd=str(backend_path),
         check=True,
     )
-    console.print(f"[green]Venv Python {target_version} prêt.[/green]")
+    console.print(f"[green]Python {target_version} venv ready.[/green]")
 
 
 def read_env_toml(path: Path) -> dict:
@@ -105,7 +105,7 @@ def read_env_toml(path: Path) -> dict:
     except tomllib.TOMLDecodeError as e:
         from rich.panel import Panel
         import sys
-        console.print(Panel(str(e), title="[bold red]Erreur de syntaxe dans .env.toml[/bold red]", border_style="red"))
+        console.print(Panel(str(e), title="[bold red]Syntax error in .env.toml[/bold red]", border_style="red"))
         sys.exit(1)
 
 

@@ -93,23 +93,21 @@ def audit_and_prompt_reload(project_path: Path, config: JaspeConfig) -> None:
     
     if mismatched_files:
         console.print(Panel(
-            f"[bold yellow]⚠️  Attention : Dérive de configuration détectée ![/bold yellow]\n\n"
-            f"Les fichiers suivants ont été modifiés manuellement :\n"
+            f"[bold yellow]⚠️  Configuration Drift Detected![/bold yellow]\n\n"
+            f"The following files have been manually modified:\n"
             + "\n".join([f"  - [cyan]{f}[/cyan]" for f in mismatched_files]) +
-            f"\n\nVotre environnement local (Venv, Node Modules) n'est peut-être plus à jour.",
-            title="Audit d'Intégrité",
+            f"\n\nYour local environment (Venv, Node Modules) may be out of sync.",
+            title="Integrity Audit",
             border_style="yellow"
         ))
         
-        if Confirm.ask("Voulez-vous effectuer un [bold]jaspe reload[/bold] maintenant pour synchroniser ?", default=True):
+        if Confirm.ask("Would you like to run [bold]jaspe reload[/bold] now to synchronize?", default=True):
             from jaspe.main import reload
-            # On simule l'appel à reload
-            # Note: On utilise typer.Exit pour arrêter l'exécution actuelle si on reload
-            # Mais c'est mieux si l'utilisateur lance la commande lui-même pour voir les logs
-            console.print("[blue]Lancement du reload...[/blue]")
+            # We use typer.Exit to stop current execution if we reload
+            console.print("[blue]Launching reload...[/blue]")
             raise typer.Exit(subprocess_reload(project_path))
         else:
-            console.print("[dim]Poursuite avec l'environnement actuel (non recommandé).[/dim]\n")
+            console.print("[dim]Continuing with current environment (not recommended).[/dim]\n")
 
 
 def subprocess_reload(project_path: Path) -> int:

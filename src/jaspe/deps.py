@@ -22,7 +22,7 @@ def install_npm_exact(pkg_name: str, frontend_path: Path, dev: bool = False) -> 
     save_flag = "--save-dev" if dev else "--save-prod"
     run_with_spinner(
         ["npm", "install", pkg_name, save_flag, "--save-exact"],
-        f"Installation npm de '{pkg_name}' {mode_text}(version exacte)",
+        f"Installing npm package '{pkg_name}' {mode_text}(exact version)...",
         cwd=str(frontend_path),
     )
 
@@ -30,7 +30,7 @@ def install_npm_exact(pkg_name: str, frontend_path: Path, dev: bool = False) -> 
 def install_uv_pkg(pkg_name: str, backend_path: Path) -> None:
     run_with_spinner(
         ["uv", "pip", "install", pkg_name],
-        f"Installation Python de '{pkg_name}' via uv",
+        f"Installing Python package '{pkg_name}' via uv...",
         cwd=str(backend_path),
         env=_backend_env(backend_path),
     )
@@ -72,6 +72,6 @@ def add_backend_package(pkg_name: str, backend_path: Path) -> None:
     version = get_uv_pkg_version(pkg_name, backend_path)
     if version:
         update_requirements_txt(pkg_name, version, backend_path)
-        console.print(f"[green]'{pkg_name}=={version}' ajouté à requirements.txt[/green]")
+        console.print(f"[green]'{pkg_name}=={version}' added to requirements.txt[/green]")
     else:
-        console.print(f"[red]Impossible de récupérer la version de '{pkg_name}'.[/red]")
+        console.print(f"[red]Failed to retrieve version for '{pkg_name}'.[/red]")

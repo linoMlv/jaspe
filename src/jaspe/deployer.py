@@ -41,31 +41,31 @@ def run_deploy(cfg: JaspeConfig, target: Path, reload: bool = False, skip_build:
     host_target = cfg.deploy.target
     remote_path = cfg.deploy.path
     
-    console.print(f"[bold blue]Déploiement cible :[/] [cyan]{host_target}:{remote_path}[/cyan]")
+    console.print(f"[bold blue]Deployment target:[/] [cyan]{host_target}:{remote_path}[/cyan]")
     
-    # Phase 1: Audit du VPS distant
-    console.print("\n[bold yellow]--- Phase 1 : Audit du Serveur ---[/bold yellow]")
+    # Phase 1: Server Audit
+    console.print("\n[bold yellow]--- Phase 1: Server Audit ---[/bold yellow]")
     res_uv = run_ssh(host_target, "command -v uv", check=False)
     if res_uv.returncode != 0:
-        console.print("[red]❌ 'uv' n'est pas installé sur la machine distante.[/red]")
-        if Confirm.ask("Voulez-vous l'installer automatiquement via curl ?"):
-            run_ssh_with_spinner(host_target, "curl -LsSf https://astral.sh/uv/install.sh | sh", "Installation de uv (astral.sh)")
-            run_ssh_with_spinner(host_target, "source $HOME/.local/bin/env", "Activation de uv")
+        console.print("[red]❌ 'uv' is not installed on the remote machine.[/red]")
+        if Confirm.ask("Would you like to install it automatically via curl?"):
+            run_ssh_with_spinner(host_target, "curl -LsSf https://astral.sh/uv/install.sh | sh", "Installing uv (astral.sh)...")
+            run_ssh_with_spinner(host_target, "source $HOME/.local/bin/env", "Activating uv...")
         else:
             raise typer.Exit(1)
     else:
-        console.print("[green]✔ 'uv' est installé.[/green]")
+        console.print("[green]✔ 'uv' is installed.[/green]")
         
     res_jaspe = run_ssh(host_target, "command -v jaspe", check=False)
     if res_jaspe.returncode != 0:
-        console.print("[red]❌ 'jaspe' n'est pas installé sur la machine distante.[/red]")
-        if Confirm.ask("Voulez-vous installer jaspe automatiquement sur le serveur ?"):
-            run_ssh_with_spinner(host_target, "export PATH=$PATH:$HOME/.local/bin; curl -fsSL https://raw.githubusercontent.com/linoMlv/jaspe/refs/heads/master/install.sh | bash", "Installation de jaspe (install.sh)")
-            run_ssh_with_spinner(host_target, "source $HOME/.local/bin/env", "Activation de jaspe")
+        console.print("[red]❌ 'jaspe' is not installed on the remote machine.[/red]")
+        if Confirm.ask("Would you like to install jaspe automatically on the server?"):
+            run_ssh_with_spinner(host_target, "export PATH=$PATH:$HOME/.local/bin; curl -fsSL https://raw.githubusercontent.com/linoMlv/jaspe/refs/heads/master/install.sh | bash", "Installing jaspe (install.sh)...")
+            run_ssh_with_spinner(host_target, "source $HOME/.local/bin/env", "Activating jaspe...")
         else:
             raise typer.Exit(1)
     else:
-        console.print("[green]✔ 'jaspe' est installé.[/green]")
+        console.print("[green]✔ 'jaspe' is installed.[/green]")
         # Audit de mise à jour (Git)
         check_git_cmd = (
             "if [ -d $HOME/.jaspe-cli ]; then "
@@ -76,35 +76,35 @@ def run_deploy(cfg: JaspeConfig, target: Path, reload: bool = False, skip_build:
         )
         res_git = run_ssh(host_target, check_git_cmd, check=False)
         if "UPDATE_AVAILABLE" in res_git.stdout:
-            console.print("[yellow]⚠️ Une mise à jour de l'outil Jaspe est disponible sur le serveur.[/yellow]")
-            if Confirm.ask("Voulez-vous mettre à jour Jaspe sur le serveur maintenant ?"):
-                run_ssh_with_spinner(host_target, "export PATH=$PATH:$HOME/.local/bin; curl -fsSL https://raw.githubusercontent.com/linoMlv/jaspe/refs/heads/master/install.sh | bash", "Mise à jour de l'outil Jaspe (install.sh)")
-                run_ssh_with_spinner(host_target, "source $HOME/.local/bin/env", "Réactivation après mise à jour")
+            console.print("[yellow]⚠️ An update for the Jaspe CLI tool is available on the server.[/yellow]")
+            if Confirm.ask("Would you like to update Jaspe on the server now?"):
+                run_ssh_with_spinner(host_target, "export PATH=$PATH:$HOME/.local/bin; curl -fsSL https://raw.githubusercontent.com/linoMlv/jaspe/refs/heads/master/install.sh | bash", "Updating Jaspe tool (install.sh)...")
+                run_ssh_with_spinner(host_target, "source $HOME/.local/bin/env", "Re-activating after update...")
         
     if not cfg.deploy.build_locally:
         res_node = run_ssh(host_target, "command -v node", check=False)
         if res_node.returncode != 0:
-            console.print("[red]❌ 'node' n'est pas installé sur le serveur et build_locally est à False.[/red]")
-            console.print("=> Installez Node (via nvm, fnm, ou apt) sur la cible avant de réessayer.")
+            console.print("[red]❌ 'node' is not installed on the server and build_locally is set to False.[/red]")
+            console.print("=> Install Node.js (via nvm, fnm, or apt) on the target before retrying.")
             raise typer.Exit(1)
-        console.print("[green]✔ 'node' est installé.[/green]")
+        console.print("[green]✔ 'node' is installed.[/green]")
 
-    # Phase 2: Clone vs Rsync vs Update
-    console.print("\n[bold yellow]--- Phase 2 : Envoi & Installation ---[/bold yellow]")
+    # Phase 2: Upload & Installation
+    console.print("\n[bold yellow]--- Phase 2: Upload & Installation ---[/bold yellow]")
     res_dir = run_ssh(host_target, f"test -d {remote_path}", check=False)
     exists = (res_dir.returncode == 0)
     
     repo_url = cfg.git.repo_url if cfg.git else ""
     
     if not exists:
-        console.print("[blue]Nouvelle application, création d'une arborescence...[/blue]")
+        console.print("[blue]Target directory not found, creating structure...[/blue]")
         if repo_url and not cfg.deploy.build_locally:
-            run_ssh_with_spinner(host_target, f"jaspe init '{repo_url}' '{remote_path}'", "Clonage distant interactif (jaspe init)")
+            run_ssh_with_spinner(host_target, f"jaspe init '{repo_url}' '{remote_path}'", "Interactive remote cloning (jaspe init)...")
         else:
-            run_ssh_with_spinner(host_target, f"mkdir -p {remote_path}", "Création du dossier hôte")
+            run_ssh_with_spinner(host_target, f"mkdir -p {remote_path}", "Creating target directory...")
             if cfg.deploy.build_locally and not skip_build:
                 front_path = target / cfg.config.frontend_folder
-                run_with_spinner(["npm", "run", "build"], "Build local du frontend React/Vite", cwd=str(front_path))
+                run_with_spinner(["npm", "run", "build"], "Local build of React/Vite frontend...", cwd=str(front_path))
                 
             cmd_rsync = ["rsync", "-avz"]
             
@@ -118,20 +118,20 @@ def run_deploy(cfg: JaspeConfig, target: Path, reload: bool = False, skip_build:
                 "--exclude", ".venv", "--exclude", "__pycache__", 
                 str(target) + "/", f"{host_target}:{remote_path}/"
             ])
-            run_with_spinner(cmd_rsync, "Transfert Rsync (Initial) vers le serveur (Ignorant les fichiers lourds)")
-            run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.backend_folder} && ( [ -d .venv ] || uv venv ) && uv pip install -r requirements.txt", "Installation distante des dépendances Python")
+            run_with_spinner(cmd_rsync, "Rsync Transfer (Initial) to server...")
+            run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.backend_folder} && ( [ -d .venv ] || uv venv ) && uv pip install -r requirements.txt", "Installing remote Python dependencies...")
             if not cfg.deploy.build_locally:
-                run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.frontend_folder} && npm install", "Installation distante des dépendances Node")
+                run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.frontend_folder} && npm install", "Installing remote Node.js dependencies...")
     else:
-        console.print("[blue]L'application existe déjà sur le serveur.[/blue]")
+        console.print("[blue]Application already exists on the server.[/blue]")
         reload_flag = " --reload" if reload else ""
         skip_build_flag = " --skip-build" if skip_build else ""
         if not cfg.deploy.build_locally and repo_url:
-            run_ssh_with_spinner(host_target, f"cd {remote_path} && jaspe update{reload_flag}{skip_build_flag}", "Mise à jour Intelligente (jaspe update) sur le serveur")
+            run_ssh_with_spinner(host_target, f"cd {remote_path} && jaspe update{reload_flag}{skip_build_flag}", "Intelligent Update (jaspe update) on server...")
         else:
             if cfg.deploy.build_locally and not skip_build:
                 front_path = target / cfg.config.frontend_folder
-                run_with_spinner(["npm", "run", "build"], "Build local du frontend React/Vite", cwd=str(front_path))
+                run_with_spinner(["npm", "run", "build"], "Local build of React/Vite frontend...", cwd=str(front_path))
                 
             cmd_rsync = ["rsync", "-avz", "--delete"]
             
@@ -145,35 +145,35 @@ def run_deploy(cfg: JaspeConfig, target: Path, reload: bool = False, skip_build:
                 "--exclude", ".venv", "--exclude", "__pycache__", 
                 str(target) + "/", f"{host_target}:{remote_path}/"
             ])
-            run_with_spinner(cmd_rsync, "Envoi Rapide Rsync des modifs (Update local)")
+            run_with_spinner(cmd_rsync, "Rsync Transfer (Patch Update) to server...")
             
             if reload:
-                run_ssh_with_spinner(host_target, f"rm -rf {remote_path}/{cfg.config.backend_folder}/.venv", "Nettoyage distant du Venv (Reload)")
+                run_ssh_with_spinner(host_target, f"rm -rf {remote_path}/{cfg.config.backend_folder}/.venv", "Cleaning remote Venv (Reload)...")
                 
-            run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.backend_folder} && ( [ -d .venv ] || uv venv ) && uv pip install -r requirements.txt", "Mise à jour distante des dépendances Python")
+            run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.backend_folder} && ( [ -d .venv ] || uv venv ) && uv pip install -r requirements.txt", "Updating remote Python dependencies...")
             if not cfg.deploy.build_locally:
-                run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.frontend_folder} && npm install", "Mise à jour distante des dépendances Node")
+                run_ssh_with_spinner(host_target, f"cd {remote_path}/{cfg.config.frontend_folder} && npm install", "Updating remote Node.js dependencies...")
 
-    # Phase 3: Synchro du fichier d'environnement
-    console.print("\n[bold yellow]--- Phase 3 : Synchronisation Secrets ---[/bold yellow]")
+    # Phase 3: Secrets Synchronization
+    console.print("\n[bold yellow]--- Phase 3: Secrets Synchronization ---[/bold yellow]")
     if cfg.deploy.sync_env:
         env_file = target / ".env.toml"
         if env_file.exists():
             res_env = run_ssh(host_target, f"test -f {remote_path}/.env.toml", check=False)
             if res_env.returncode == 0:
-                console.print("[bold red]⚠️ Attention : Un fichier .env.toml existe déjà sur le serveur distant.[/bold red]")
-                console.print(" [1] Écraser: Remplacer le serveur par la version locale de votre PC")
-                console.print(" [2] Ignorer: Garder la version distante (Ne rien envoyer)")
-                console.print(" [3] Fusion: Fusionner les deux avec priorité à votre PC (Local)")
-                console.print(" [4] Fusion: Fusionner les deux avec priorité au serveur (Distant)")
+                console.print("[bold red]⚠️  Warning: .env.toml already exists on the remote server.[/bold red]")
+                console.print(" [1] Overwrite: Replace server file with local version")
+                console.print(" [2] Skip: Keep remote version (do nothing)")
+                console.print(" [3] Merge (Local Priority): Merge both, preferring local values")
+                console.print(" [4] Merge (Server Priority): Merge both, preferring server values")
                 
-                choice = Prompt.ask("Votre choix", choices=["1", "2", "3", "4"], default="3")
+                choice = Prompt.ask("Your choice", choices=["1", "2", "3", "4"], default="3")
                 
                 if choice == "2":
-                    console.print("[dim]Conservation du fichier distant. Ignoré.[/dim]")
+                    console.print("[dim]Remote file preserved. Skipping.[/dim]")
                 elif choice == "1":
-                    run_with_spinner(["scp", str(env_file), f"{host_target}:{remote_path}/.env.toml"], "Transfert SCP de .env.toml (Écrasement)")
-                    console.print("[green]Secrets mis à jour avec succès.[/green]")
+                    run_with_spinner(["scp", str(env_file), f"{host_target}:{remote_path}/.env.toml"], "SCP Transfer: .env.toml (Overwrite)...")
+                    console.print("[green]Secrets updated successfully.[/green]")
                 else:
                     remote_env_raw = run_ssh(host_target, f"cat {remote_path}/.env.toml", check=True).stdout
                     if sys.version_info >= (3, 11):
@@ -201,19 +201,19 @@ def run_deploy(cfg: JaspeConfig, target: Path, reload: bool = False, skip_build:
                     merged_content = dump_toml(merged)
                     tmp_file = target / ".env.toml.merge"
                     tmp_file.write_text(merged_content, encoding="utf-8")
-                    run_with_spinner(["scp", str(tmp_file), f"{host_target}:{remote_path}/.env.toml"], "Transfert SCP de .env.toml (Fusion Intelligente)")
+                    run_with_spinner(["scp", str(tmp_file), f"{host_target}:{remote_path}/.env.toml"], "SCP Transfer: .env.toml (Smart Merge)...")
                     tmp_file.unlink()
-                    console.print("[green]Secrets fusionnés et déployés avec succès.[/green]")
+                    console.print("[green]Secrets merged and deployed successfully.[/green]")
             else:
-                run_with_spinner(["scp", str(env_file), f"{host_target}:{remote_path}/.env.toml"], "Transfert SCP Régulier de .env.toml")
-                console.print("[green]Secrets mis à jour avec succès.[/green]")
+                run_with_spinner(["scp", str(env_file), f"{host_target}:{remote_path}/.env.toml"], "SCP Transfer: .env.toml...")
+                console.print("[green]Secrets updated successfully.[/green]")
         else:
-            console.print("[dim]Aucun .env.toml détecté. Ignoré.[/dim]")
+            console.print("[dim]No .env.toml detected. Skipping.[/dim]")
     else:
-        console.print("[dim]sync_env=false. Ignoré.[/dim]")
+        console.print("[dim]sync_env=false. Skipping.[/dim]")
             
-    # Phase 4: Run Process
-    console.print("\n[bold yellow]--- Phase 4 : Lancement / Bascule ---[/bold yellow]")
+    # Phase 4: Ignition
+    console.print("\n[bold yellow]--- Phase 4: Launching / Switching ---[/bold yellow]")
     skip_flag = " --skip-build" if (cfg.deploy.build_locally or skip_build) else ""
-    run_ssh_with_spinner(host_target, f"cd {remote_path} && jaspe start prod{skip_flag}", "Exécution finale globale (jaspe start prod)")
-    console.print("\n[bold green]🚀 Mission Accomplie ! L'application tourne en Remote Production.[/]")
+    run_ssh_with_spinner(host_target, f"cd {remote_path} && jaspe start prod{skip_flag}", "Final ignition (jaspe start prod)...")
+    console.print("\n[bold green]🚀 Mission Accomplished! Application is running in Remote Production.[/]")

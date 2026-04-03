@@ -22,7 +22,7 @@ def run_reload(cfg: JaspeConfig, target: Path, clean_cache: bool = False, perfor
     name = cfg.config.app_name
     
     # 1. Confirmation
-    if not Confirm.ask(f"[bold yellow]⚠️  Attention : Cette opération va supprimer et reconstruire l'environnement de '{name}'. Continuer ?[/]"):
+    if not Confirm.ask(f"[bold yellow]⚠️  Warning: This operation will delete and rebuild the environment for '{name}'. Proceed?[/]"):
         return False
 
     if perform_stop:
@@ -33,10 +33,10 @@ def run_reload(cfg: JaspeConfig, target: Path, clean_cache: bool = False, perfor
     venv_path = backend_path / ".venv"
     
     if venv_path.exists():
-        run_with_spinner(["rm", "-rf", str(venv_path)], "Suppression de l'ancien Venv Python")
+        run_with_spinner(["rm", "-rf", str(venv_path)], "Removing old Python Venv...")
 
     if clean_cache:
-        run_with_spinner(["uv", "cache", "clean"], "Nettoyage du cache UV global")
+        run_with_spinner(["uv", "cache", "clean"], "Cleaning global UV cache...")
 
     # 5. Nettoyage Frontend
     frontend_path = target / cfg.config.frontend_folder
@@ -44,28 +44,28 @@ def run_reload(cfg: JaspeConfig, target: Path, clean_cache: bool = False, perfor
     dist_folder = frontend_path / cfg.frontend.dist_folder
     
     if node_modules.exists():
-        run_with_spinner(["rm", "-rf", str(node_modules)], "Suppression des modules Node")
+        run_with_spinner(["rm", "-rf", str(node_modules)], "Removing Node modules...")
     
     if dist_folder.exists():
-        run_with_spinner(["rm", "-rf", str(dist_folder)], "Vidage du dossier de build (dist)")
+        run_with_spinner(["rm", "-rf", str(dist_folder)], "Cleaning build folder (dist)...")
         
     if clean_cache:
-         run_with_spinner(["npm", "cache", "clean", "--force"], "Nettoyage du cache NPM global")
+         run_with_spinner(["npm", "cache", "clean", "--force"], "Cleaning global NPM cache...")
 
     # 6. Reconstruction Backend
     # ensure_python_venv va recréer le dossier s'il manque
     ensure_python_venv(cfg.environment.python_version, backend_path)
     
-    # Installation deps
+    # Dependencies installation
     run_with_spinner(
         ["uv", "pip", "install", "-r", "requirements.txt"], 
-        "Réinstallation fraîche des dépendances Python", 
+        "Freshly reinstalling Python dependencies...", 
         cwd=str(backend_path),
         env=_backend_env(backend_path)
     )
 
-    # 7. Reconstruction Frontend
-    run_with_spinner(["npm", "install"], "Réinstallation fraîche des modules Node", cwd=str(frontend_path))
+    # 7. Frontend Reconstruction
+    run_with_spinner(["npm", "install"], "Freshly reinstalling Node modules...", cwd=str(frontend_path))
 
-    console.print(f"\n[bold green]✓[/bold green] Réinitialisation de l'application '{name}' terminée.")
+    console.print(f"\n[bold green]✓[/bold green] Application '{name}' reset successfully.")
     return True

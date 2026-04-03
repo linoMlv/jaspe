@@ -71,7 +71,7 @@ async def health():
 
 
 def run_git_clone(url: str, target_dir: Path) -> None:
-    run_with_spinner(["git", "clone", url, str(target_dir)], f"Clonage de {url}")
+    run_with_spinner(["git", "clone", url, str(target_dir)], f"Cloning {url}...")
 
 
 def create_directory(base: Path, name: str) -> Path:
@@ -93,7 +93,7 @@ def generate_empty_env_toml(target: Path) -> None:
 def run_uv_init(backend_dir: Path, python_version: str = "3.11") -> None:
     run_with_spinner(
         ["uv", "venv", "--python", python_version],
-        f"Création du venv Python {python_version} avec uv",
+        f"Creating Python {python_version} venv with uv...",
         cwd=str(backend_dir),
     )
 
@@ -108,7 +108,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Déploiement via SSH sur VPS Jaspe
+      - name: Deploy via SSH to Jaspe VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{{{ secrets.VPS_HOST }}}}
@@ -117,7 +117,7 @@ jobs:
           script: |
             export PATH=$PATH:$HOME/.local/bin
             
-            # Vérifie si le projet racine jaspe.toml est déjà initialisé
+            # Check if project root jaspe.toml is already initialized
             if [ ! -f "{deploy_path}/jaspe.toml" ]; then
               jaspe init ${{{{ github.event.repository.clone_url }}}} {deploy_path}
               cd {deploy_path}
@@ -139,11 +139,11 @@ def generate_github_actions_ci(target_dir: Path, app_name: str) -> None:
 def run_npm_init_vite(target_dir: Path, frontend_name: str = "frontend") -> None:
     run_with_spinner(
         ["npm", "create", "-y", "vite@latest", frontend_name, "--", "--template", "react-ts", "--no-interactive"],
-        "Initialisation du frontend avec Vite (React-TS)",
+        "Initializing frontend with Vite (React-TS)...",
         cwd=str(target_dir),
     )
     # Pre-install dependencies to make it fully ready to use
-    run_with_spinner(["npm", "install"], "Installation silencieuse des dépendances Node.js initiales", cwd=str(target_dir / frontend_name))
+    run_with_spinner(["npm", "install"], "Installing initial Node.js dependencies...", cwd=str(target_dir / frontend_name))
 
 
 def generate_default_fastapi_main(backend_dir: Path) -> None:
@@ -152,7 +152,7 @@ def generate_default_fastapi_main(backend_dir: Path) -> None:
 
 def init_from_scratch(target: Path) -> None:
     app_name = target.name
-    console.print(f"[green]Création du projet '{app_name}'...[/green]")
+    console.print(f"[green]Creating project '{app_name}'...[/green]")
 
     # Créer les dossiers
     backend_dir = create_directory(target, "backend")
@@ -181,7 +181,7 @@ def init_from_scratch(target: Path) -> None:
     # Frontend : npm create vite
     run_npm_init_vite(target, "frontend")
 
-    console.print(f"[green]Projet '{app_name}' initialisé avec succès ![/green]")
+    console.print(f"[green]Project '{app_name}' initialized successfully.[/green]")
 
 
 def init_from_clone(url: str, target: Path) -> None:
@@ -189,7 +189,7 @@ def init_from_clone(url: str, target: Path) -> None:
 
     toml_path = target / "jaspe.toml"
     if not check_if_toml_exists(toml_path):
-        console.print("[red]Erreur : jaspe.toml introuvable dans le dépôt cloné.[/red]")
+        console.print("[red]Error: jaspe.toml not found in cloned repository.[/red]")
         return
 
     cfg = load_config(toml_path)
@@ -204,20 +204,20 @@ def init_from_clone(url: str, target: Path) -> None:
     if (backend_dir / "requirements.txt").exists():
         run_with_spinner(
             ["uv", "pip", "install", "-r", "requirements.txt"],
-            "Installation des dépendances Python depuis requirements.txt",
+            "Installing Python dependencies from requirements.txt...",
             cwd=str(backend_dir),
             env=_backend_env(backend_dir),
         )
 
     if (frontend_dir / "package.json").exists():
-        run_with_spinner(["npm", "ci"], "Installation des dépendances Node (npm ci)", cwd=str(frontend_dir))
+        run_with_spinner(["npm", "ci"], "Installing Node.js dependencies (npm ci)...", cwd=str(frontend_dir))
 
     # Créer un .env.toml vide si absent
     env_toml = target / ".env.toml"
     if not env_toml.exists():
         generate_empty_env_toml(target)
         console.print(
-            "[yellow]Un fichier .env.toml vide a été créé. Pensez à le remplir.[/yellow]"
+            "[yellow]Empty .env.toml created. Remember to fill it.[/yellow]"
         )
 
-    console.print("[green]Projet cloné et initialisé avec succès ![/green]")
+    console.print("[green]Project cloned and initialized successfully.[/green]")
