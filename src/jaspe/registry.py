@@ -25,12 +25,13 @@ def write_registry(data: dict) -> None:
     REGISTRY_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
-def add_or_update_app(app_name: str, path: str, port: int, status: str) -> None:
+def add_or_update_app(app_name: str, path: str, port: int, status: str, cron_names: list[str] = None) -> None:
     data = read_registry()
     data["apps"][app_name] = {
         "path": path,
         "port": port,
         "status": status,
+        "cron_names": cron_names or []
     }
     write_registry(data)
 

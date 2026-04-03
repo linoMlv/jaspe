@@ -91,7 +91,8 @@ def init(url: str = typer.Argument(None, help="Git repository URL to clone")):
 def start(
     mode: str = typer.Argument(..., help="Launch mode: dev or prod"),
     share: bool = typer.Option(False, "--share", help="Share the development environment via localtunnel"),
-    skip_build: bool = typer.Option(False, "--skip-build", help="Skip Vite build step (prod mode)")
+    skip_build: bool = typer.Option(False, "--skip-build", help="Skip Vite build step (prod mode)"),
+    health_check: bool = typer.Option(True, "--health-check/--no-health-check", help="Verify application accessibility after launch")
 ):
     """Start the application in dev or prod mode."""
     from jaspe.dev_server import run_dev
@@ -136,7 +137,7 @@ def start(
         )
     elif mode == "prod":
         from jaspe.prod_server import start_app_production
-        start_app_production(cfg, target, skip_build=skip_build)
+        start_app_production(cfg, target, skip_build=skip_build, health_check=health_check)
     else:
         console.print(f"[red]Unknown mode: '{mode}'. Use 'dev' or 'prod'.[/red]")
         raise typer.Exit(1)
@@ -148,15 +149,23 @@ def stop(app_name: str = typer.Argument(None, help="Application name")):
     import subprocess
 
     target = resolve_target_dir(app_name)
-    cfg = load_config(target / "jaspe.toml")
+    
+    # 🛡️ Fallback si le jaspe.toml manque
+    if not (target / "jaspe.toml").exists() and app_name:
+        from jaspe.config import load_config_fallback
+        cfg = load_config_fallback(app_name)
+    else:
+        cfg = load_config(target / "jaspe.toml")
+        
     name = cfg.config.app_name
     service = f"jaspe-{name}.service"
 
-    run_with_spinner(["systemctl", "--user", "stop", service], "Stopping primary application...")
+    run_with_spinner(["systemctl", "--user", "stop", service], "Stopping primary application...", check=False)
     for cron in cfg.crons:
         timer_name = f"jaspe-{name}-{cron.name}.timer"
         run_with_spinner(["systemctl", "--user", "stop", timer_name], f"Stopping cron {cron.name}...", check=False)
-    registry.add_or_update_app(name, str(target), cfg.config.app_port, "stopped")
+    
+    registry.add_or_update_app(name, str(target), cfg.config.app_port, "stopped", cron_names=[c.name for c in cfg.crons])
     console.print(f"[green]Application '{name}' stopped successfully.[/green]")
 
 
@@ -173,7 +182,9 @@ def list_apps():
     table.add_column("Status", style="bold")
 
     for name, info in data["apps"].items():
-        table.add_row(name, str(info["port"]), info["path"], info["status"])
+        path_exists = Path(info["path"]).exists()
+        path_str = info["path"] if path_exists else f"[red]{info['path']} (MISSING)[/]"
+        table.add_row(name, str(info["port"]), path_str, info["status"])
 
     console.print(table)
 
@@ -183,7 +194,14 @@ def remove(app_name: str = typer.Argument(None, help="Application name")):
     from jaspe.prod_server import remove_app_production
 
     target = resolve_target_dir(app_name)
-    cfg = load_config(target / "jaspe.toml")
+    
+    # 🛡️ Fallback si le jaspe.toml manque
+    if not (target / "jaspe.toml").exists() and app_name:
+        from jaspe.config import load_config_fallback
+        cfg = load_config_fallback(app_name)
+    else:
+        cfg = load_config(target / "jaspe.toml")
+        
     remove_app_production(cfg, target)
 
 
@@ -243,7 +261,8 @@ def reload(
 def deploy(
     app_name: str = typer.Argument(None, help="Application name"),
     reload: bool = typer.Option(False, "--reload", help="Reset remote environment during deployment"),
-    skip_build: bool = typer.Option(False, "--skip-build", help="Skip frontend build (e.g. if already built locally)")
+    skip_build: bool = typer.Option(False, "--skip-build", help="Skip frontend build (e.g. if already built locally)"),
+    health_check: bool = typer.Option(True, "--health-check/--no-health-check", help="Verify remote application accessibility after launch")
 ):
     """Deploy application to a remote VPS."""
     from jaspe.deployer import run_deploy
@@ -258,7 +277,7 @@ def deploy(
         console.print("[red]Error: [deploy] section (target and path) must be configured in jaspe.toml.[/red]")
         raise typer.Exit(1)
 
-    run_deploy(cfg, target, reload=reload, skip_build=skip_build)
+    run_deploy(cfg, target, reload=reload, skip_build=skip_build, health_check=health_check)
 
 
 @app.command("check-update")
@@ -364,6 +383,37 @@ def logs_cmd(
         subprocess.run(cmd)
     except KeyboardInterrupt:
         pass
+
+
+@app.command()
+def prune():
+    """Remove all 'ghost' applications (missing source files) from registry."""
+    from jaspe.prod_server import remove_app_production
+    from jaspe.config import load_config_fallback
+    
+    data = registry.read_registry()
+    ghosts = []
+    for name, info in data["apps"].items():
+        if not Path(info["path"]).exists():
+            ghosts.append(name)
+            
+    if not ghosts:
+        console.print("[green]No ghost applications found.[/green]")
+        return
+        
+    console.print(f"[yellow]Found {len(ghosts)} ghost applications:[/yellow]")
+    for g in ghosts:
+        console.print(f" - {g}")
+        
+    if Confirm.ask("\n[bold red]Would you like to stop and remove all these ghost applications?[/]"):
+        for g in ghosts:
+            console.print(f"\n[bold blue]Pruning {g}...[/]")
+            path = Path(data["apps"][g]["path"])
+            cfg = load_config_fallback(g)
+            remove_app_production(cfg, path)
+        console.print("\n[bold green]✓ Pruning complete.[/]")
+    else:
+        console.print("[blue]Operation cancelled.[/blue]")
 
 if __name__ == "__main__":
     app()

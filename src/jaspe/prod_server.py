@@ -1,4 +1,6 @@
 import subprocess
+import time
+import http.client
 from pathlib import Path
 
 from rich.console import Console
@@ -194,6 +196,24 @@ def install_systemd_service(app_name: str, service_content: str) -> None:
     console.print(f"[green]SystemD service '{service_name}' started.[/green]")
 
 
+def wait_for_health_check(host: str, port: int, timeout: int = 10) -> bool:
+    """Attente active du démarrage de l'application (Health Check)."""
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            conn = http.client.HTTPConnection(host, port, timeout=2)
+            conn.request("GET", "/")
+            response = conn.getresponse()
+            # On considère que toute réponse (même 404/401) signifie que le serveur écoute
+            if response.status:
+                conn.close()
+                return True
+        except (ConnectionRefusedError, http.client.HTTPException, Exception):
+            pass
+        time.sleep(1)
+    return False
+
+
 def install_systemd_crons(config: JaspeConfig, project_path: Path, env: dict) -> None:
     if not config.crons:
         return
@@ -270,7 +290,7 @@ def remove_app_production(cfg: JaspeConfig, target: Path) -> None:
     console.print(f"[green]Application '{name}' removed from production.[/green]")
 
 
-def start_app_production(cfg: JaspeConfig, target: Path, skip_build: bool = False) -> None:
+def start_app_production(cfg: JaspeConfig, target: Path, skip_build: bool = False, health_check: bool = True) -> None:
     """Orchestre le build et le lancement en production."""
     from jaspe.env_manager import build_env_for_section
     import getpass
@@ -290,5 +310,17 @@ def start_app_production(cfg: JaspeConfig, target: Path, skip_build: bool = Fals
     install_systemd_crons(cfg, target, back_env)
     
     # Registry entry
-    registry.add_or_update_app(cfg.config.app_name, str(target), cfg.config.app_port, "active")
-    console.print(f"\n[bold green]🚀 Application '{cfg.config.app_name}' launched in production![/]")
+    cron_names = [c.name for c in cfg.crons]
+    registry.add_or_update_app(cfg.config.app_name, str(target), cfg.config.app_port, "active", cron_names=cron_names)
+    
+    if health_check:
+        run_with_spinner(lambda: wait_for_health_check(cfg.config.host, cfg.config.app_port), f"Waiting for application to respond on port {cfg.config.app_port}...")
+        if not wait_for_health_check(cfg.config.host, cfg.config.app_port, timeout=1):
+            console.print(f"\n[bold red]❌ Health Check Failed: Application is not responding on http://{cfg.config.host}:{cfg.config.app_port}[/]")
+            console.print("[yellow]Automatically stopping the broken application to prevent zombie process...[/]")
+            remove_app_production(cfg, target)
+            raise Exception("Application failed to start properly (Health Check timeout).")
+    
+    url = f"http://{cfg.config.host}:{cfg.config.app_port}"
+    console.print(f"\n[bold green]🚀 Application '{cfg.config.app_name}' successfully launched in production![/]")
+    console.print(f"[blue]Link: {url}[/blue]")

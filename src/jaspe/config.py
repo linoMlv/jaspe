@@ -110,6 +110,8 @@ def load_config(path: Path) -> JaspeConfig:
     c = Console()
     
     if not path.is_file():
+        # En cas d'absence, on tente de voir si on peut charger un squelette depuis le registre
+        # (Sera géré plus haut par main.py qui appellera load_config_fallback si besoin)
         c.print("[red]Fichier jaspe.toml introuvable. Êtes-vous dans un projet Jaspe ?[/red]")
         sys.exit(1)
         
@@ -134,3 +136,24 @@ def load_config(path: Path) -> JaspeConfig:
             pass
         
     return map_dict_to_jaspe_config(data)
+
+
+def load_config_fallback(app_name: str) -> JaspeConfig:
+    """Génère une config 'squelette' à partir du registre si les fichiers sources sont disparus."""
+    from jaspe import registry
+    data = registry.read_registry()
+    app_info = data["apps"].get(app_name)
+    
+    if not app_info:
+        return JaspeConfig()
+        
+    # Création d'une config minimale pour permettre stop/remove
+    config = JaspeConfig()
+    config.config.app_name = app_name
+    config.config.app_port = app_info.get("port", 8000)
+    
+    # Récupération des crons stockés dans le registre
+    cron_names = app_info.get("cron_names", [])
+    config.crons = [CronSection(name=name) for name in cron_names]
+    
+    return config

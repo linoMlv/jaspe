@@ -37,11 +37,17 @@ def dump_toml(d: dict) -> str:
     return "\n".join(lines)
 
 
-def run_deploy(cfg: JaspeConfig, target: Path, reload: bool = False, skip_build: bool = False):
+def run_deploy(cfg: JaspeConfig, target: Path, reload: bool = False, skip_build: bool = False, health_check: bool = True):
     host_target = cfg.deploy.target
     remote_path = cfg.deploy.path
     
     console.print(f"[bold blue]Deployment target:[/] [cyan]{host_target}:{remote_path}[/cyan]")
+    
+    # 🔍 Audit d'IP Publique
+    res_ip = run_ssh(host_target, "curl -s https://api.ipify.org || curl -s icanhazip.com", check=False)
+    public_ip = res_ip.stdout.strip() if res_ip.returncode == 0 else "Unknown"
+    if public_ip != "Unknown":
+        console.print(f"[bold blue]Public IP:[/] [cyan]{public_ip}[/cyan]")
     
     # Phase 1: Server Audit
     console.print("\n[bold yellow]--- Phase 1: Server Audit ---[/bold yellow]")
@@ -215,5 +221,10 @@ def run_deploy(cfg: JaspeConfig, target: Path, reload: bool = False, skip_build:
     # Phase 4: Ignition
     console.print("\n[bold yellow]--- Phase 4: Launching / Switching ---[/bold yellow]")
     skip_flag = " --skip-build" if (cfg.deploy.build_locally or skip_build) else ""
-    run_ssh_with_spinner(host_target, f"cd {remote_path} && jaspe start prod{skip_flag}", "Final ignition (jaspe start prod)...")
-    console.print("\n[bold green]🚀 Mission Accomplished! Application is running in Remote Production.[/]")
+    hc_flag = "" if health_check else " --no-health-check"
+    run_ssh_with_spinner(host_target, f"cd {remote_path} && jaspe start prod{skip_flag}{hc_flag}", "Final ignition (jaspe start prod)...")
+    
+    url_ip = public_ip if public_ip != "Unknown" else cfg.config.host
+    url = f"http://{url_ip}:{cfg.config.app_port}"
+    console.print(f"\n[bold green]🚀 Mission Accomplished! Application is running in Remote Production.[/]")
+    console.print(f"[blue]Public Link: {url}[/blue]")
