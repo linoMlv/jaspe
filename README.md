@@ -198,8 +198,8 @@ SECRET_KEY = "super_secret"
 
 [deploy]
 # Vos accès SSH confidentiels sont à l'abri ici (hors du jaspe.toml commité)
-target = "user@vps.coodlab.fr"
-path = "/var/www/abacus"
+target = "user@192.0.0.1"
+path = "/var/www/projet"
 ```
 
 **Ordre de priorité :** Variables système (OS) > `.env.toml` > fichiers `.env` locaux.
